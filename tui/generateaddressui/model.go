@@ -129,13 +129,14 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
 	case tea.KeyMsg:
 		switch msg.String() {
-		case "ctrl+c", "esc":
+		case "ctrl+c":
 			return m, tea.Quit
 
-		case "left", "right":
-			if m.focusIndex == 2 {
-
+		case "esc":
+			return m, func() tea.Msg {
+				return BackMsg(true)
 			}
+
 		// Set focus to next input
 		case "tab", "shift+tab", "enter", "up", "down":
 			s := msg.String()
@@ -245,6 +246,8 @@ func (m Model) View() string {
 	if m.generatedAddress != "" {
 		b.WriteString("The generated address is: " + m.generatedAddress)
 	}
+
+	b.WriteString(helpStyle.Render("press 'esc' to go back "))
 
 	return b.String()
 }
