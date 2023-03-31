@@ -22,8 +22,15 @@ var (
 	helpStyle           = blurredStyle.Copy()
 	cursorModeHelpStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("244"))
 
-	focusedButton = focusedStyle.Copy().Render("[ Submit ]")
-	blurredButton = fmt.Sprintf("[ %s ]", blurredStyle.Render("Submit"))
+	accessFocusedButton = focusedStyle.Copy().Render("[ Access Keychain ]")
+	accessBlurredButton = fmt.Sprintf("[ %s ]", blurredStyle.Render("Access Keychain"))
+
+	urlType = []string{"Local", "Testnet", "Mainnet", "Custom"}
+	urls    = map[string]string{
+		"Local":   "http://localhost:4000",
+		"Testnet": "https://testnet.archethic.net",
+		"Mainnet": "https://mainnet.archethic.net",
+		"Custom":  ""}
 )
 
 func GetNodeEndpointURL(name string) string {
@@ -44,6 +51,7 @@ type Model struct {
 	inputs       []textinput.Model
 	keychain     *archethic.Keychain
 	serviceNames []string
+	selectedUrl  string
 }
 
 func New() Model {
@@ -58,9 +66,7 @@ func New() Model {
 
 		switch i {
 		case 0:
-			t.Prompt = "> Node endpoint:\n"
-			t.Focus()
-			t.Placeholder = "(default local)"
+			t.Prompt = ""
 		case 1:
 			t.Prompt = "> Access seed\n"
 			t.EchoMode = textinput.EchoPassword
@@ -95,14 +101,15 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 			// Did the user press enter while the submit button was focused?
 			// If so, exit.
-			if s == "enter" && m.focusIndex == len(m.inputs) {
-				var tmpUrl string
-				if m.inputs[0].Value() == "" {
-					tmpUrl = "l"
-				} else {
-					tmpUrl = m.inputs[0].Value()
-				}
-				url := GetNodeEndpointURL(tmpUrl)
+			if s == "enter" && m.focusIndex < 4 {
+				u := urlType[m.focusIndex]
+				m.inputs[0].SetValue(urls[u])
+				m.selectedUrl = u
+				m.focusIndex = 3
+			}
+
+			if s == "enter" && m.focusIndex == len(m.inputs)+4 {
+				url := m.inputs[0].Value()
 				seed := []byte(m.inputs[1].Value())
 				client := archethic.NewAPIClient(url, "")
 				m.keychain = archethic.GetKeychain(seed, *client)
@@ -122,19 +129,17 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.focusIndex++
 			}
 
-			if m.focusIndex > len(m.inputs) {
+			if m.focusIndex > len(m.inputs)+4 {
 				m.focusIndex = 0
 			} else if m.focusIndex < 0 {
-				m.focusIndex = len(m.inputs)
+				m.focusIndex = len(m.inputs) + 4
 			}
 
 			cmds := make([]tea.Cmd, len(m.inputs))
 			for i := 0; i <= len(m.inputs)-1; i++ {
-				if i == m.focusIndex {
+				if i == m.focusIndex-4 {
 					// Set focused state
 					cmds[i] = m.inputs[i].Focus()
-					// m.inputs[i].PromptStyle = focusedStyle
-					// m.inputs[i].TextStyle = focusedStyle
 					continue
 				}
 				// Remove focused state
@@ -166,19 +171,16 @@ func (m *Model) updateInputs(msg tea.Msg) tea.Cmd {
 func (m Model) View() string {
 	var b strings.Builder
 
+	b.WriteString("> Node endpoint:\n")
+	b.WriteString(urlView(m))
 	for i := range m.inputs {
+		b.WriteRune('\n')
 		b.WriteString(m.inputs[i].View())
-		if i == 0 {
-			b.WriteString("\n\tL for local\n\tM for mainnet\n\tT for testnet\n\tor enter a custom endpoint\n")
-		}
-		if i < len(m.inputs)-1 {
-			b.WriteRune('\n')
-		}
 	}
 
-	button := &blurredButton
-	if m.focusIndex == len(m.inputs) {
-		button = &focusedButton
+	button := &accessBlurredButton
+	if m.focusIndex == len(m.inputs)+4 {
+		button = &accessFocusedButton
 	}
 	fmt.Fprintf(&b, "\n\n%s\n\n", *button)
 
@@ -191,4 +193,26 @@ func (m Model) View() string {
 	b.WriteString(helpStyle.Render("press 'esc' to go back "))
 
 	return b.String()
+}
+
+func urlView(m Model) string {
+	s := strings.Builder{}
+
+	for i := 0; i < len(urlType); i++ {
+		var u string
+		if m.selectedUrl == urlType[i] {
+			u = "(•) "
+		} else {
+			u = "( ) "
+		}
+		u += urlType[i]
+		if i == m.focusIndex {
+			s.WriteString(focusedStyle.Render(u))
+		} else {
+			s.WriteString(u)
+		}
+		s.WriteString("\n")
+	}
+
+	return s.String()
 }
