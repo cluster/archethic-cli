@@ -6,6 +6,7 @@ import (
 	"os"
 
 	"github.com/archethic-foundation/archethic-cli/tui/generateaddressui"
+	"github.com/archethic-foundation/archethic-cli/tui/keychainmanagementui"
 	"github.com/archethic-foundation/archethic-cli/tui/mainui"
 	tea "github.com/charmbracelet/bubbletea"
 )
@@ -17,16 +18,18 @@ type sessionState int
 const (
 	menuView sessionState = iota
 	generateAddressView
+	keychainManagementView
 	monthView
 	loadingView
 )
 
 type MainModel struct {
-	state           sessionState
-	main            tea.Model
-	generateAddress tea.Model
-	ActiveMenuID    uint
-	windowSize      tea.WindowSizeMsg
+	state              sessionState
+	main               tea.Model
+	generateAddress    tea.Model
+	keychainManagement tea.Model
+	ActiveMenuID       uint
+	windowSize         tea.WindowSizeMsg
 }
 
 // StartTea the entry point for the UI. Initializes the model.
@@ -55,9 +58,10 @@ func StartTea() {
 // New initialize the main model for your program
 func New() MainModel {
 	return MainModel{
-		state:           sessionState(0),
-		main:            mainui.New(),
-		generateAddress: generateaddressui.New(),
+		state:              sessionState(0),
+		main:               mainui.New(),
+		generateAddress:    generateaddressui.New(),
+		keychainManagement: keychainmanagementui.New(),
 	}
 }
 
@@ -80,8 +84,17 @@ func (m MainModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.main, _ = m.main.Update(msg)
 	case generateaddressui.BackMsg:
 		m.state = menuView
+	case keychainmanagementui.BackMsg:
+		m.state = menuView
 	case mainui.SelectMsg:
-		m.state = generateAddressView
+		switch msg.ActiveMenu {
+		case 1:
+			m.state = generateAddressView
+		// case 2:
+		// 	m.state = keychainManagementView
+		case 3:
+			m.state = keychainManagementView
+		}
 	}
 
 	switch m.state {
@@ -94,12 +107,20 @@ func (m MainModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.main = newModel
 		cmd = newCmd
 	case generateAddressView:
-		newProject, newCmd := m.generateAddress.Update(msg)
-		newModel, ok := newProject.(generateaddressui.Model)
+		newGenerateAddress, newCmd := m.generateAddress.Update(msg)
+		newModel, ok := newGenerateAddress.(generateaddressui.Model)
 		if !ok {
 			panic("could not perform assertion on generateaddressui model")
 		}
 		m.generateAddress = newModel
+		cmd = newCmd
+	case keychainManagementView:
+		newKeychainManagement, newCmd := m.keychainManagement.Update(msg)
+		newModel, ok := newKeychainManagement.(keychainmanagementui.Model)
+		if !ok {
+			panic("could not perform assertion on keychainmanagement model")
+		}
+		m.keychainManagement = newModel
 		cmd = newCmd
 	}
 	cmds = append(cmds, cmd)
@@ -113,6 +134,8 @@ func (m MainModel) View() string {
 		return m.main.View()
 	case generateAddressView:
 		return m.generateAddress.View()
+	case keychainManagementView:
+		return m.keychainManagement.View()
 	default:
 		return m.main.View()
 	}

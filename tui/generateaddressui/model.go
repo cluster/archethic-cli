@@ -144,7 +144,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			// Did the user press enter while the submit button was focused?
 			// If so, exit.
 			if s == "enter" && m.focusIndex == len(m.inputs) {
-				seed := m.inputs[0].Value()
+				seed := archethic.MaybeConvertToHex(m.inputs[0].Value())
 				index, err := strconv.ParseUint(m.inputs[1].Value(), 10, 32)
 
 				// check for errors
@@ -163,7 +163,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				curve := archethic.Curve(uint8(curveInt))
 				hashAlgo := archethic.HashAlgo(uint8(hashAlgoInt))
 
-				address := archethic.DeriveAddress([]byte(seed), uint32(index), curve, hashAlgo)
+				address := archethic.DeriveAddress(seed, uint32(index), curve, hashAlgo)
 				m.generatedAddress = hex.EncodeToString(address)
 			}
 
