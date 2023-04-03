@@ -25,6 +25,8 @@ var (
 	accessFocusedButton = focusedStyle.Copy().Render("[ Access Keychain ]")
 	accessBlurredButton = fmt.Sprintf("[ %s ]", blurredStyle.Render("Access Keychain"))
 
+	// createTransactionFocusedButton       = focusedStyle.Copy().Render("[ Create Transaction ]")
+	// createTransactionaccessBlurredButton = fmt.Sprintf("[ %s ]", blurredStyle.Render("Create Transaction"))
 	urlType = []string{"Local", "Testnet", "Mainnet", "Custom"}
 	urls    = map[string]string{
 		"Local":   "http://localhost:4000",
@@ -32,19 +34,6 @@ var (
 		"Mainnet": "https://mainnet.archethic.net",
 		"Custom":  ""}
 )
-
-func GetNodeEndpointURL(name string) string {
-	switch name {
-	case "L", "l":
-		return "http://localhost:4000"
-	case "T", "t":
-		return "https://testnet.archethic.org"
-	case "M", "m":
-		return "https://mainnet.archethic.org"
-	default:
-		return name
-	}
-}
 
 type Model struct {
 	focusIndex   int
@@ -110,7 +99,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 			if s == "enter" && m.focusIndex == len(m.inputs)+4 {
 				url := m.inputs[0].Value()
-				seed := []byte(m.inputs[1].Value())
+				seed := archethic.MaybeConvertToHex(m.inputs[1].Value())
 				client := archethic.NewAPIClient(url, "")
 				m.keychain = archethic.GetKeychain(seed, *client)
 				m.serviceNames = make([]string, 0, len(m.keychain.Services))
@@ -188,6 +177,11 @@ func (m Model) View() string {
 		for _, k := range m.serviceNames {
 			b.WriteString(k + " : " + m.keychain.Services[k].DerivationPath + "\n")
 		}
+		// button := &createTransactionFocusedButton
+		// if m.focusIndex == len(m.inputs)+5 {
+		// 	button = &createTransactionFocusedButton
+		// }
+		// fmt.Fprintf(&b, "\n\n%s\n\n", *button)
 	}
 
 	b.WriteString(helpStyle.Render("press 'esc' to go back "))
