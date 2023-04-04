@@ -5,6 +5,7 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/archethic-foundation/archethic-cli/tui/keychaincreatetransactionui"
 	archethic "github.com/archethic-foundation/libgo"
 	"github.com/charmbracelet/bubbles/textinput"
 	tea "github.com/charmbracelet/bubbletea"
@@ -25,10 +26,10 @@ var (
 	accessFocusedButton = focusedStyle.Copy().Render("[ Access Keychain ]")
 	accessBlurredButton = fmt.Sprintf("[ %s ]", blurredStyle.Render("Access Keychain"))
 
-	// createTransactionFocusedButton       = focusedStyle.Copy().Render("[ Create Transaction ]")
-	// createTransactionaccessBlurredButton = fmt.Sprintf("[ %s ]", blurredStyle.Render("Create Transaction"))
-	urlType = []string{"Local", "Testnet", "Mainnet", "Custom"}
-	urls    = map[string]string{
+	createTransactionFocusedButton       = focusedStyle.Copy().Render("[ Create Transaction ]")
+	createTransactionaccessBlurredButton = fmt.Sprintf("[ %s ]", blurredStyle.Render("Create Transaction"))
+	urlType                              = []string{"Local", "Testnet", "Mainnet", "Custom"}
+	urls                                 = map[string]string{
 		"Local":   "http://localhost:4000",
 		"Testnet": "https://testnet.archethic.net",
 		"Mainnet": "https://mainnet.archethic.net",
@@ -36,11 +37,12 @@ var (
 )
 
 type Model struct {
-	focusIndex   int
-	inputs       []textinput.Model
-	keychain     *archethic.Keychain
-	serviceNames []string
-	selectedUrl  string
+	focusIndex      int
+	inputs          []textinput.Model
+	keychain        *archethic.Keychain
+	serviceNames    []string
+	selectedUrl     string
+	selectedService int
 }
 
 func New() Model {
@@ -100,7 +102,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			if s == "enter" && m.focusIndex == len(m.inputs)+4 {
 				url := m.inputs[0].Value()
 				seed := archethic.MaybeConvertToHex(m.inputs[1].Value())
-				client := archethic.NewAPIClient(url, "")
+				client := archethic.NewAPIClient(url)
 				m.keychain = archethic.GetKeychain(seed, *client)
 				m.serviceNames = make([]string, 0, len(m.keychain.Services))
 				for k := range m.keychain.Services {
@@ -111,6 +113,20 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 			}
 
+			if s == "enter" && m.focusIndex > len(m.inputs)+4 {
+				m.selectedService = m.focusIndex - len(m.inputs) - 5
+			}
+
+			if s == "enter" && m.focusIndex == len(m.inputs)+5+len(m.serviceNames) {
+				return m, func() tea.Msg {
+					return keychaincreatetransactionui.CreateTransactionMsg{
+						ServiceName: m.serviceNames[m.selectedService-1],
+						Url:         m.inputs[0].Value(),
+						Seed:        m.inputs[1].Value(),
+					}
+				}
+			}
+
 			// Cycle indexes
 			if s == "up" || s == "shift+tab" {
 				m.focusIndex--
@@ -118,10 +134,15 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.focusIndex++
 			}
 
-			if m.focusIndex > len(m.inputs)+4 {
+			serviceSize := len(m.serviceNames)
+			// if there is at least one service, there is a button to create a transaction
+			if serviceSize > 0 {
+				serviceSize++
+			}
+			if m.focusIndex > len(m.inputs)+4+serviceSize {
 				m.focusIndex = 0
 			} else if m.focusIndex < 0 {
-				m.focusIndex = len(m.inputs) + 4
+				m.focusIndex = len(m.inputs) + 4 + serviceSize
 			}
 
 			cmds := make([]tea.Cmd, len(m.inputs))
@@ -174,14 +195,28 @@ func (m Model) View() string {
 	fmt.Fprintf(&b, "\n\n%s\n\n", *button)
 
 	if m.keychain != nil {
-		for _, k := range m.serviceNames {
-			b.WriteString(k + " : " + m.keychain.Services[k].DerivationPath + "\n")
+		for i, k := range m.serviceNames {
+
+			var u string
+			if m.selectedService == i {
+				u = "(•) "
+			} else {
+				u = "( ) "
+			}
+			u += k + " : " + m.keychain.Services[k].DerivationPath + "\n"
+			if m.focusIndex == i+len(m.inputs)+5 {
+				b.WriteString(focusedStyle.Render(u))
+			} else {
+				b.WriteString(u)
+			}
+			b.WriteString("\n")
 		}
-		// button := &createTransactionFocusedButton
-		// if m.focusIndex == len(m.inputs)+5 {
-		// 	button = &createTransactionFocusedButton
-		// }
-		// fmt.Fprintf(&b, "\n\n%s\n\n", *button)
+
+		button := &createTransactionaccessBlurredButton
+		if m.focusIndex == len(m.inputs)+len(m.serviceNames)+5 {
+			button = &createTransactionFocusedButton
+		}
+		fmt.Fprintf(&b, "\n\n%s\n\n", *button)
 	}
 
 	b.WriteString(helpStyle.Render("press 'esc' to go back "))

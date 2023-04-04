@@ -6,6 +6,7 @@ import (
 	"os"
 
 	"github.com/archethic-foundation/archethic-cli/tui/generateaddressui"
+	"github.com/archethic-foundation/archethic-cli/tui/keychaincreatetransactionui"
 	"github.com/archethic-foundation/archethic-cli/tui/keychainmanagementui"
 	"github.com/archethic-foundation/archethic-cli/tui/mainui"
 	tea "github.com/charmbracelet/bubbletea"
@@ -19,17 +20,19 @@ const (
 	menuView sessionState = iota
 	generateAddressView
 	keychainManagementView
+	keychainCreateTransactionView
 	monthView
 	loadingView
 )
 
 type MainModel struct {
-	state              sessionState
-	main               tea.Model
-	generateAddress    tea.Model
-	keychainManagement tea.Model
-	ActiveMenuID       uint
-	windowSize         tea.WindowSizeMsg
+	state                     sessionState
+	main                      tea.Model
+	generateAddress           tea.Model
+	keychainManagement        tea.Model
+	keychainCreateTransaction tea.Model
+	ActiveMenuID              uint
+	windowSize                tea.WindowSizeMsg
 }
 
 // StartTea the entry point for the UI. Initializes the model.
@@ -58,10 +61,11 @@ func StartTea() {
 // New initialize the main model for your program
 func New() MainModel {
 	return MainModel{
-		state:              sessionState(0),
-		main:               mainui.New(),
-		generateAddress:    generateaddressui.New(),
-		keychainManagement: keychainmanagementui.New(),
+		state:                     sessionState(0),
+		main:                      mainui.New(),
+		generateAddress:           generateaddressui.New(),
+		keychainManagement:        keychainmanagementui.New(),
+		keychainCreateTransaction: keychaincreatetransactionui.New(),
 	}
 }
 
@@ -86,6 +90,10 @@ func (m MainModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.state = menuView
 	case keychainmanagementui.BackMsg:
 		m.state = menuView
+	case keychaincreatetransactionui.BackMsg:
+		m.state = menuView
+	case keychaincreatetransactionui.CreateTransactionMsg:
+		m.state = keychainCreateTransactionView
 	case mainui.SelectMsg:
 		switch msg.ActiveMenu {
 		case 1:
@@ -122,6 +130,14 @@ func (m MainModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		m.keychainManagement = newModel
 		cmd = newCmd
+	case keychainCreateTransactionView:
+		newKeychainCreateTransaction, newCmd := m.keychainCreateTransaction.Update(msg)
+		newModel, ok := newKeychainCreateTransaction.(keychaincreatetransactionui.Model)
+		if !ok {
+			panic("could not perform assertion on keychainmanagement model")
+		}
+		m.keychainCreateTransaction = newModel
+		cmd = newCmd
 	}
 	cmds = append(cmds, cmd)
 	return m, tea.Batch(cmds...)
@@ -136,6 +152,8 @@ func (m MainModel) View() string {
 		return m.generateAddress.View()
 	case keychainManagementView:
 		return m.keychainManagement.View()
+	case keychainCreateTransactionView:
+		return m.keychainCreateTransaction.View()
 	default:
 		return m.main.View()
 	}
