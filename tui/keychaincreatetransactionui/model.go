@@ -70,42 +70,42 @@ var (
 type RenderFunc func(m Model) string
 
 type Model struct {
-	Tabs                   []string
-	TabContent             []RenderFunc
-	activeTab              int
-	focusInput             int
-	mainInputs             []textinput.Model
-	contentTextAreaInputs  []textarea.Model
-	ucoInputs              []textinput.Model
-	tokenInputs            []textinput.Model
-	recipientsInput        textinput.Model
-	ownershipsInputs       []textinput.Model
-	transaction            archethic.TransactionBuilder
-	secretKey              []byte
-	authorizedKeys         []string
-	storageNouncePublicKey string
-	url                    string
-	serviceName            string
-	serviceMode            bool
-	feedback               string
+	Tabs                       []string
+	TabContent                 []RenderFunc
+	activeTab                  int
+	focusInput                 int
+	mainInputs                 []textinput.Model
+	contentTextAreaInput       textarea.Model
+	smartContractTextAreaInput textarea.Model
+	ucoInputs                  []textinput.Model
+	tokenInputs                []textinput.Model
+	recipientsInput            textinput.Model
+	ownershipsInputs           []textinput.Model
+	transaction                archethic.TransactionBuilder
+	secretKey                  []byte
+	authorizedKeys             []string
+	storageNouncePublicKey     string
+	url                        string
+	serviceName                string
+	serviceMode                bool
+	feedback                   string
 }
 
 func New() Model {
 	key := make([]byte, 32)
 	rand.Read(key)
 	m := Model{
-		mainInputs:            make([]textinput.Model, 3),
-		contentTextAreaInputs: make([]textarea.Model, 2),
-		ucoInputs:             make([]textinput.Model, 2),
-		tokenInputs:           make([]textinput.Model, 4),
-		ownershipsInputs:      make([]textinput.Model, 2),
-		focusInput:            0,
-		activeTab:             0,
-		transaction:           *archethic.NewTransaction(archethic.KeychainAccessType),
-		secretKey:             key,
+		mainInputs:       make([]textinput.Model, 3),
+		ucoInputs:        make([]textinput.Model, 2),
+		tokenInputs:      make([]textinput.Model, 4),
+		ownershipsInputs: make([]textinput.Model, 2),
+		focusInput:       0,
+		activeTab:        0,
+		transaction:      *archethic.NewTransaction(archethic.KeychainAccessType),
+		secretKey:        key,
 	}
-	tabs := []string{"Main", "UCO Transfers", "Token Transfers", "Recipients", "Ownerships", "Content"}
-	tabContent := []RenderFunc{main, ucoTransfer, tokenTransfer, recipients, ownerships, content}
+	tabs := []string{"Main", "UCO Transfers", "Token Transfers", "Recipients", "Ownerships", "Content", "Smart Contract"}
+	tabContent := []RenderFunc{main, ucoTransfer, tokenTransfer, recipients, ownerships, content, smartContract}
 	m.TabContent = tabContent
 	m.Tabs = tabs
 
@@ -165,6 +165,8 @@ func New() Model {
 		switch i {
 		case 0:
 			t.Prompt = "> Secret:\n"
+			t.EchoMode = textinput.EchoPassword
+			t.EchoCharacter = '•'
 		case 1:
 			t.Prompt = "> Authorization key:\n"
 		}
@@ -172,16 +174,11 @@ func New() Model {
 		m.ownershipsInputs[i] = t
 	}
 
-	for i := range m.contentTextAreaInputs {
-		ta := textarea.New()
-		switch i {
-		case 0:
-			ta.Prompt = "> Content:\n"
-		case 1:
-			ta.Prompt = "> Code:\n"
-		}
-		m.contentTextAreaInputs[i] = ta
-	}
+	m.contentTextAreaInput = textarea.New()
+	// passing 0 or a negati number here doesn't seem to work...
+	m.contentTextAreaInput.CharLimit = 100000000000
+	m.smartContractTextAreaInput = textarea.New()
+	m.smartContractTextAreaInput.CharLimit = 100000000000
 
 	return m
 }
@@ -205,19 +202,62 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case tea.KeyMsg:
 		switch keypress := msg.String(); keypress {
 		case "esc":
+			if m.activeTab == 5 && m.contentTextAreaInput.Focused() {
+				m.contentTextAreaInput.Blur()
+				return m, nil
+			}
+
+			if m.activeTab == 6 && m.smartContractTextAreaInput.Focused() {
+				m.smartContractTextAreaInput.Blur()
+				return m, nil
+			}
+
 			return m, func() tea.Msg {
 				return BackMsg(true)
 			}
 		case "ctrl+c":
 			return m, tea.Quit
 		case "right", "tab":
-			m.activeTab = min(m.activeTab+1, len(m.Tabs)-1)
-			m.focusInput = 0
-			return m, nil
+			switch m.activeTab {
+			case 5:
+				if !m.contentTextAreaInput.Focused() {
+					m.activeTab = min(m.activeTab+1, len(m.Tabs)-1)
+					m.focusInput = 0
+					return m, nil
+				}
+			case 6:
+				if !m.smartContractTextAreaInput.Focused() {
+					m.activeTab = min(m.activeTab+1, len(m.Tabs)-1)
+					m.focusInput = 0
+					return m, nil
+				}
+			default:
+				m.activeTab = min(m.activeTab+1, len(m.Tabs)-1)
+				m.focusInput = 0
+				return m, nil
+			}
+
 		case "left", "shift+tab":
-			m.activeTab = max(m.activeTab-1, 0)
-			m.focusInput = 0
-			return m, nil
+
+			switch m.activeTab {
+			case 5:
+				if !m.contentTextAreaInput.Focused() {
+					m.activeTab = max(m.activeTab-1, 0)
+					m.focusInput = 0
+					return m, nil
+				}
+			case 6:
+				if !m.smartContractTextAreaInput.Focused() {
+					m.activeTab = max(m.activeTab-1, 0)
+					m.focusInput = 0
+					return m, nil
+				}
+			default:
+				m.activeTab = max(m.activeTab-1, 0)
+				m.focusInput = 0
+				return m, nil
+			}
+
 		case "up", "down":
 			m = getFocusIndex(m, keypress)
 		case "enter":
@@ -231,7 +271,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					m.focusInput = 4
 				} else if m.focusInput > 5 && m.focusInput < 15 {
 					t := transactionTypesList[m.focusInput-6]
-					m.transaction.TxType = transactionTypes[t]
+					m.transaction.SetType(transactionTypes[t])
 					m.focusInput = 15
 				} else if m.focusInput == 15 {
 
@@ -255,14 +295,14 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 					ts := archethic.NewTransactionSender(client)
 					ts.AddOnSent(func() {
-						m.feedback = "Transaction sent"
+						m.feedback = "Transaction sent: " + m.url + "/explorer/transaction/" + strings.ToUpper(hex.EncodeToString(m.transaction.Address))
 					})
 
 					ts.AddOnError(func(sender, message string) {
-						m.feedback = "Transaction error" + sender + message
+						m.feedback = "Transaction error" + message
 					})
 
-					ts.SendTransaction(&m.transaction, 1, 1000)
+					ts.SendTransaction(&m.transaction, 100, 60)
 
 				}
 
@@ -309,6 +349,13 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					m = deleteOwnership(m)
 				}
 			}
+		default:
+			switch m.activeTab {
+			case 5:
+				m.transaction.SetContent([]byte(m.contentTextAreaInput.Value()))
+			case 6:
+				m.transaction.SetCode(m.smartContractTextAreaInput.Value())
+			}
 		}
 	}
 	m, cmds := updateFocus(m)
@@ -345,10 +392,11 @@ func (m *Model) updateInputs(msg tea.Msg) []tea.Cmd {
 			m.ownershipsInputs[i], cmds[i] = m.ownershipsInputs[i].Update(msg)
 		}
 	case 5:
-		cmds := make([]tea.Cmd, len(m.contentTextAreaInputs))
-		for i := range m.contentTextAreaInputs {
-			m.contentTextAreaInputs[i], cmds[i] = m.contentTextAreaInputs[i].Update(msg)
-		}
+		cmds := make([]tea.Cmd, 1)
+		m.contentTextAreaInput, cmds[0] = m.contentTextAreaInput.Update(msg)
+	case 6:
+		cmds := make([]tea.Cmd, 1)
+		m.smartContractTextAreaInput, cmds[0] = m.smartContractTextAreaInput.Update(msg)
 	}
 
 	return cmds
@@ -425,16 +473,11 @@ func updateFocus(m Model) (Model, []tea.Cmd) {
 			m.ownershipsInputs[i].TextStyle = noStyle
 		}
 	case 5:
-		cmds := make([]tea.Cmd, len(m.contentTextAreaInputs))
-		for i := 0; i <= len(m.contentTextAreaInputs)-1; i++ {
-			if i == m.focusInput {
-				// Set focused state
-				cmds[i] = m.contentTextAreaInputs[i].Focus()
-				continue
-			}
-			// Remove focused state
-			m.contentTextAreaInputs[i].Blur()
-		}
+		cmds := make([]tea.Cmd, 1)
+		cmds[0] = m.contentTextAreaInput.Focus()
+	case 6:
+		cmds := make([]tea.Cmd, 1)
+		cmds[0] = m.smartContractTextAreaInput.Focus()
 
 	}
 	return m, cmds
@@ -485,12 +528,6 @@ func getFocusIndex(m Model, keypress string) Model {
 			m.focusInput = 0
 		} else if m.focusInput < 0 {
 			m.focusInput = len(m.ownershipsInputs) + len(m.authorizedKeys) + len(m.transaction.Data.Ownerships) + 2
-		}
-	case 5:
-		if m.focusInput > len(m.contentTextAreaInputs) {
-			m.focusInput = 0
-		} else if m.focusInput < 0 {
-			m.focusInput = len(m.contentTextAreaInputs)
 		}
 	}
 	return m
@@ -792,6 +829,9 @@ func ucoTransfer(m Model) string {
 			b.WriteString(transfer)
 		}
 	}
+	if len(m.transaction.Data.Ledger.Uco.Transfers) > 0 {
+		b.WriteString(helpStyle.Render("\npress 'd' to delete the selected UCO transfer "))
+	}
 	return b.String()
 }
 
@@ -819,6 +859,9 @@ func tokenTransfer(m Model) string {
 			b.WriteString(transfer)
 		}
 	}
+	if len(m.transaction.Data.Ledger.Token.Transfers) > 0 {
+		b.WriteString(helpStyle.Render("\npress 'd' to delete the selected token transfer "))
+	}
 	return b.String()
 }
 
@@ -843,6 +886,9 @@ func recipients(m Model) string {
 			b.WriteString(recipient)
 		}
 	}
+	if len(m.transaction.Data.Recipients) > 0 {
+		b.WriteString(helpStyle.Render("\npress 'd' to delete the selected recipient "))
+	}
 	return b.String()
 }
 
@@ -865,6 +911,7 @@ func ownerships(m Model) string {
 			}
 			b.WriteRune('\n')
 		}
+		b.WriteString(helpStyle.Render("\npress 'd' to delete the selected authorized key "))
 	}
 
 	buttonAddAuthKey := &blurredAddAuthKey
@@ -899,14 +946,30 @@ func ownerships(m Model) string {
 			b.WriteString(ownerships)
 		}
 	}
+	if len(m.transaction.Data.Ownerships) > 0 {
+		b.WriteString(helpStyle.Render("\npress 'd' to delete the selected ownership "))
+	}
 	return b.String()
 }
 
 func content(m Model) string {
 	var b strings.Builder
-	for i := range m.contentTextAreaInputs {
-		b.WriteString(m.contentTextAreaInputs[i].View())
+
+	b.WriteString(m.contentTextAreaInput.View())
+
+	if m.contentTextAreaInput.Focused() {
+		b.WriteString(helpStyle.Render("\npress 'esc' to exit edit mode "))
 	}
 
+	return b.String()
+}
+
+func smartContract(m Model) string {
+	var b strings.Builder
+
+	b.WriteString(m.smartContractTextAreaInput.View())
+	if m.smartContractTextAreaInput.Focused() {
+		b.WriteString(helpStyle.Render("\npress 'esc' to exit edit mode "))
+	}
 	return b.String()
 }
