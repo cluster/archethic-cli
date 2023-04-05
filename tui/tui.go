@@ -98,8 +98,8 @@ func (m MainModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		switch msg.ActiveMenu {
 		case 1:
 			m.state = generateAddressView
-		// case 2:
-		// 	m.state = keychainManagementView
+		case 2:
+			m.state = keychainCreateTransactionView
 		case 3:
 			m.state = keychainManagementView
 		}

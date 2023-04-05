@@ -72,7 +72,7 @@ func (i item) FilterValue() string { return i.title }
 func menu() []list.Item {
 	menu := []list.Item{
 		item{title: "Generate Address", desc: ""},
-		item{title: "Build & Send Transaction (TODO)", desc: ""},
+		item{title: "Build & Send Transaction", desc: ""},
 		item{title: "Keychain Management", desc: ""},
 	}
 	return menu

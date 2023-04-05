@@ -3,11 +3,13 @@ package keychaincreatetransactionui
 import (
 	"crypto/rand"
 	"encoding/hex"
+	"errors"
 	"fmt"
-	"log"
+	"reflect"
 	"strconv"
 	"strings"
 
+	"github.com/archethic-foundation/archethic-cli/tui/tuiutils"
 	archethic "github.com/archethic-foundation/libgo"
 	"github.com/charmbracelet/bubbles/textarea"
 	"github.com/charmbracelet/bubbles/textinput"
@@ -85,7 +87,6 @@ type Model struct {
 	secretKey                  []byte
 	authorizedKeys             []string
 	storageNouncePublicKey     string
-	url                        string
 	serviceName                string
 	serviceMode                bool
 	feedback                   string
@@ -95,7 +96,7 @@ func New() Model {
 	key := make([]byte, 32)
 	rand.Read(key)
 	m := Model{
-		mainInputs:       make([]textinput.Model, 3),
+		mainInputs:       make([]textinput.Model, 5),
 		ucoInputs:        make([]textinput.Model, 2),
 		tokenInputs:      make([]textinput.Model, 4),
 		ownershipsInputs: make([]textinput.Model, 2),
@@ -120,6 +121,15 @@ func New() Model {
 			t.EchoMode = textinput.EchoPassword
 			t.EchoCharacter = '•'
 		case 2:
+			t.Prompt = "> Elliptic curve\n"
+			t.Placeholder = "(default 0)"
+			t.CharLimit = 1
+			t.Validate = curveValidator
+		case 3:
+			t.Prompt = "> Index\n"
+			t.Placeholder = "(default 0)"
+			t.Validate = numberValidator
+		case 4:
 			t.Prompt = ""
 		}
 		m.mainInputs[i] = t
@@ -175,12 +185,25 @@ func New() Model {
 	}
 
 	m.contentTextAreaInput = textarea.New()
-	// passing 0 or a negati number here doesn't seem to work...
+	// passing 0 or a negative number here doesn't seem to work...
 	m.contentTextAreaInput.CharLimit = 100000000000
 	m.smartContractTextAreaInput = textarea.New()
 	m.smartContractTextAreaInput.CharLimit = 100000000000
 
 	return m
+}
+
+func numberValidator(s string) error {
+	_, err := strconv.ParseInt(s, 10, 32)
+	return err
+}
+
+func curveValidator(s string) error {
+	val, err := strconv.ParseInt(s, 10, 32)
+	if err == nil && (val < 0 || val > 2) {
+		return errors.New("number should be >0 and <=2")
+	}
+	return err
 }
 
 func (m Model) Init() tea.Cmd {
@@ -193,7 +216,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		initParams := CreateTransactionMsg(msg)
 		m.mainInputs[1].SetValue(initParams.Seed)
 		m.mainInputs[0].SetValue(initParams.Url)
-		m.url = initParams.Url
+		// m.url = initParams.Url
 		m.serviceName = initParams.ServiceName
 		m.serviceMode = m.serviceName != ""
 		if m.serviceMode {
@@ -260,93 +283,133 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 		case "up", "down":
 			m = getFocusIndex(m, keypress)
+			// if the seed or the curve is updated, fetch the index
+			if m.activeTab == 0 && (m.focusInput == 4 || m.focusInput == 7) {
+				client := archethic.NewAPIClient(m.mainInputs[0].Value())
+				seed := archethic.MaybeConvertToHex(m.mainInputs[1].Value())
+				address := archethic.DeriveAddress(seed, 0, getCurve(m), archethic.SHA256)
+				addressHex := hex.EncodeToString(address)
+				index := client.GetLastTransactionIndex(addressHex)
+				m.mainInputs[3].SetValue(fmt.Sprint(index))
+			}
 		case "enter":
 			switch m.activeTab {
 			case 0:
 
-				if m.focusInput < 4 {
+				if m.focusInput < 6 {
 					u := urlType[m.focusInput]
 					m.mainInputs[0].SetValue(urls[u])
-					m.url = u
 					m.focusInput = 4
-				} else if m.focusInput > 5 && m.focusInput < 15 {
-					t := transactionTypesList[m.focusInput-6]
+					m.storageNouncePublicKey = ""
+				} else if m.focusInput > 7 && m.focusInput < 17 {
+					t := transactionTypesList[m.focusInput-8]
 					m.transaction.SetType(transactionTypes[t])
-					m.focusInput = 15
-				} else if m.focusInput == 15 {
+					m.focusInput = 17
+				} else if m.focusInput == 17 {
+					m.feedback = ""
+					if len(m.transaction.Data.Code) > 0 {
 
-					client := archethic.NewAPIClient(m.url)
+						ownershipIndex := -1
+						for i, ownership := range m.transaction.Data.Ownerships {
+							decodedSecret := string(archethic.AesDecrypt(ownership.Secret, m.secretKey))
 
-					seed := archethic.MaybeConvertToHex(m.mainInputs[1].Value())
+							if reflect.DeepEqual(decodedSecret, string(archethic.MaybeConvertToHex(m.mainInputs[1].Value()))) {
+								ownershipIndex = i
+								break
+							}
+						}
 
-					keychain := archethic.GetKeychain(seed, *client)
-					log.Println(keychain.Version)
+						if ownershipIndex == -1 {
+							m.feedback = "1You need to create an ownership with the transaction seed as secret and authorize node public key to let nodes generate new transaction from your smart contract"
+						} else {
+							authorizedKeyIndex := -1
+							for i, authKey := range m.transaction.Data.Ownerships[ownershipIndex].AuthorizedKeys {
+								if strings.ToUpper(hex.EncodeToString(authKey.PublicKey)) == m.storageNouncePublicKey {
+									authorizedKeyIndex = i
+									break
+								}
+							}
 
-					originPrivateKey, _ := hex.DecodeString("01019280BDB84B8F8AEDBA205FE3552689964A5626EE2C60AA10E3BF22A91A036009")
+							if authorizedKeyIndex == -1 {
+								m.feedback = "2You need to create an ownership with the transaction seed as secret and authorize node public key to let nodes generate new transaction from your smart contract"
+							}
+						}
+					}
 
-					m.transaction.Version = uint32(keychain.Version)
+					if m.feedback == "" {
+						url := m.mainInputs[0].Value()
+						client := archethic.NewAPIClient(url)
 
-					genesisAddress := keychain.DeriveAddress(m.serviceName, 0)
+						seed := archethic.MaybeConvertToHex(m.mainInputs[1].Value())
 
-					index := client.GetLastTransactionIndex(hex.EncodeToString(genesisAddress))
+						if m.serviceMode {
+							m = buildKeychainTransaction(seed, client, m)
+						} else {
+							index, err := strconv.ParseUint(m.mainInputs[3].Value(), 10, 32)
+							if err != nil {
+								index = 0
+							}
+							curve := getCurve(m)
+							m.transaction.Build(seed, uint32(index), curve, archethic.SHA256)
 
-					m.transaction = keychain.BuildTransaction(m.transaction, m.serviceName, uint8(index))
-					m.transaction.OriginSign(originPrivateKey)
+						}
+						originPrivateKey, _ := hex.DecodeString("01019280BDB84B8F8AEDBA205FE3552689964A5626EE2C60AA10E3BF22A91A036009")
+						m.transaction.OriginSign(originPrivateKey)
 
-					ts := archethic.NewTransactionSender(client)
-					ts.AddOnSent(func() {
-						m.feedback = "Transaction sent: " + m.url + "/explorer/transaction/" + strings.ToUpper(hex.EncodeToString(m.transaction.Address))
-					})
+						ts := archethic.NewTransactionSender(client)
+						ts.AddOnSent(func() {
+							m.feedback = "Transaction sent: " + url + "/explorer/transaction/" + strings.ToUpper(hex.EncodeToString(m.transaction.Address))
+						})
 
-					ts.AddOnError(func(sender, message string) {
-						m.feedback = "Transaction error" + message
-					})
+						ts.AddOnError(func(sender, message string) {
+							m.feedback = "Transaction error" + message
+						})
 
-					ts.SendTransaction(&m.transaction, 100, 60)
-
+						ts.SendTransaction(&m.transaction, 100, 60)
+					}
 				}
 
 			case 1:
 				if m.focusInput == len(m.ucoInputs) {
-					m = addUcoTransfer(m)
+					addUcoTransfer(&m)
 				}
 			case 2:
 				if m.focusInput == len(m.tokenInputs) {
-					m = addTokenTransfer(m)
+					addTokenTransfer(&m)
 				}
 			case 3:
 				if m.focusInput == 1 || m.focusInput == 0 {
-					m = addRecipient(m)
+					addRecipient(&m)
 				}
 			case 4:
 				switch m.focusInput {
 				case len(m.ownershipsInputs) + len(m.authorizedKeys):
-					m = addAuthorizedKey(m)
+					addAuthorizedKey(&m)
 				case len(m.ownershipsInputs) + len(m.authorizedKeys) + 1:
-					m = loadStorageNouncePublicKey(m)
+					loadStorageNouncePublicKey(&m)
 				case len(m.ownershipsInputs) + len(m.authorizedKeys) + 2:
-					m = addOwnership(m)
+					addOwnership(&m)
 				}
 			}
 		case "d":
 			switch m.activeTab {
 			case 1:
 				if m.focusInput > len(m.ucoInputs) {
-					m = deleteUcoTransfer(m)
+					deleteUcoTransfer(&m)
 				}
 			case 2:
 				if m.focusInput > len(m.tokenInputs) {
-					m = deleteTokenTransfer(m)
+					deleteTokenTransfer(&m)
 				}
 			case 3:
 				if m.focusInput > 1 {
-					m = deleteRecipient(m)
+					deleteRecipient(&m)
 				}
 			case 4:
 				if m.focusInput > len(m.ownershipsInputs)-1 && m.focusInput < len(m.ownershipsInputs)+len(m.authorizedKeys) {
-					m = deleteAuthorizedKey(m)
+					deleteAuthorizedKey(&m)
 				} else if m.focusInput > len(m.ownershipsInputs)+len(m.authorizedKeys)+2 {
-					m = deleteOwnership(m)
+					deleteOwnership(&m)
 				}
 			}
 		default:
@@ -492,16 +555,16 @@ func getFocusIndex(m Model, keypress string) Model {
 	switch m.activeTab {
 	case 0:
 		if m.serviceMode {
-			if m.focusInput > 15 {
-				m.focusInput = 6
-			} else if m.focusInput < 6 {
-				m.focusInput = 15
+			if m.focusInput > 17 {
+				m.focusInput = 8
+			} else if m.focusInput < 8 {
+				m.focusInput = 17
 			}
 		} else {
-			if m.focusInput > 15 {
+			if m.focusInput > 17 {
 				m.focusInput = 0
 			} else if m.focusInput < 0 {
-				m.focusInput = 15
+				m.focusInput = 17
 			}
 		}
 
@@ -598,8 +661,15 @@ func min(a, b int) int {
 	}
 	return b
 }
+func getCurve(m Model) archethic.Curve {
+	curveInt, err := strconv.Atoi(m.mainInputs[2].Value())
+	if err != nil {
+		curveInt = 0
+	}
+	return archethic.Curve(curveInt)
+}
 
-func addUcoTransfer(m Model) Model {
+func addUcoTransfer(m *Model) {
 	toHex := m.ucoInputs[0].Value()
 	to, err := hex.DecodeString(toHex)
 	if err != nil {
@@ -613,17 +683,15 @@ func addUcoTransfer(m Model) Model {
 	m.transaction.AddUcoTransfer(to, amount)
 	m.ucoInputs[0].SetValue("")
 	m.ucoInputs[1].SetValue("")
-	return m
 }
 
-func deleteUcoTransfer(m Model) Model {
+func deleteUcoTransfer(m *Model) {
 	focusIndex := m.focusInput - len(m.ucoInputs) - 1
 	m.transaction.Data.Ledger.Uco.Transfers = append(m.transaction.Data.Ledger.Uco.Transfers[:focusIndex], m.transaction.Data.Ledger.Uco.Transfers[focusIndex+1:]...)
 	m.focusInput--
-	return m
 }
 
-func addTokenTransfer(m Model) Model {
+func addTokenTransfer(m *Model) {
 	toHex := m.tokenInputs[0].Value()
 	to, err := hex.DecodeString(toHex)
 	if err != nil {
@@ -650,17 +718,15 @@ func addTokenTransfer(m Model) Model {
 	m.tokenInputs[1].SetValue("")
 	m.tokenInputs[2].SetValue("")
 	m.tokenInputs[3].SetValue("")
-	return m
 }
 
-func deleteTokenTransfer(m Model) Model {
+func deleteTokenTransfer(m *Model) {
 	focusIndex := m.focusInput - len(m.tokenInputs) - 1
 	m.transaction.Data.Ledger.Token.Transfers = append(m.transaction.Data.Ledger.Token.Transfers[:focusIndex], m.transaction.Data.Ledger.Token.Transfers[focusIndex+1:]...)
 	m.focusInput--
-	return m
 }
 
-func addRecipient(m Model) Model {
+func addRecipient(m *Model) {
 	recipientHex := m.recipientsInput.Value()
 	recipient, err := hex.DecodeString(recipientHex)
 	if err != nil {
@@ -668,22 +734,20 @@ func addRecipient(m Model) Model {
 	}
 	m.transaction.AddRecipient(recipient)
 	m.recipientsInput.SetValue("")
-	return m
 }
 
-func deleteRecipient(m Model) Model {
+func deleteRecipient(m *Model) {
 	focusIndex := m.focusInput - 1 - 1
 	m.transaction.Data.Recipients = append(m.transaction.Data.Recipients[:focusIndex], m.transaction.Data.Recipients[focusIndex+1:]...)
 	m.focusInput--
-	return m
 }
 
-func addOwnership(m Model) Model {
+func addOwnership(m *Model) {
 
-	secret := m.ownershipsInputs[0].Value()
+	secret := archethic.MaybeConvertToHex(m.ownershipsInputs[0].Value())
 
 	if m.ownershipsInputs[1].Value() != "" {
-		m = addAuthorizedKey(m)
+		addAuthorizedKey(m)
 	}
 
 	cipher := archethic.AesEncrypt([]byte(secret), m.secretKey)
@@ -702,38 +766,46 @@ func addOwnership(m Model) Model {
 	m.authorizedKeys = []string{}
 	m.ownershipsInputs[0].SetValue("")
 	m.ownershipsInputs[1].SetValue("")
-	return m
 }
 
-func deleteOwnership(m Model) Model {
+func deleteOwnership(m *Model) {
 	focusIndex := m.focusInput - len(m.ownershipsInputs) - len(m.authorizedKeys) - 3
 	m.transaction.Data.Ownerships = append(m.transaction.Data.Ownerships[:focusIndex], m.transaction.Data.Ownerships[focusIndex+1:]...)
 	m.focusInput--
-	return m
 }
 
-func addAuthorizedKey(m Model) Model {
+func addAuthorizedKey(m *Model) {
 	authorizedKey := m.ownershipsInputs[1].Value()
 	m.authorizedKeys = append(m.authorizedKeys, authorizedKey)
 	m.ownershipsInputs[1].SetValue("")
-	return m
 }
 
-func deleteAuthorizedKey(m Model) Model {
+func deleteAuthorizedKey(m *Model) {
 	focusIndex := m.focusInput - len(m.ownershipsInputs)
 	m.authorizedKeys = append(m.authorizedKeys[:focusIndex], m.authorizedKeys[focusIndex+1:]...)
 	m.focusInput--
-	return m
 }
 
-func loadStorageNouncePublicKey(m Model) Model {
+func loadStorageNouncePublicKey(m *Model) {
 
 	if m.storageNouncePublicKey == "" {
-		client := archethic.NewAPIClient(m.url)
+		client := archethic.NewAPIClient(m.mainInputs[0].Value())
 		m.storageNouncePublicKey = client.GetStorageNoncePublicKey()
 	}
 
 	m.ownershipsInputs[1].SetValue(m.storageNouncePublicKey)
+}
+
+func buildKeychainTransaction(seed []byte, client *archethic.APIClient, m Model) Model {
+	keychain := archethic.GetKeychain(seed, *client)
+
+	m.transaction.Version = uint32(keychain.Version)
+
+	genesisAddress := keychain.DeriveAddress(m.serviceName, 0)
+
+	index := client.GetLastTransactionIndex(hex.EncodeToString(genesisAddress))
+
+	m.transaction = keychain.BuildTransaction(m.transaction, m.serviceName, uint8(index))
 	return m
 }
 
@@ -744,15 +816,24 @@ func main(m Model) string {
 	} else {
 		b.WriteString("> Node endpoint:\n")
 		b.WriteString(urlView(m))
+		// url field
 		b.WriteString(m.mainInputs[0].View() + "\n\n")
+		// seed field
 		b.WriteString(m.mainInputs[1].View() + "\n\n")
+		// curve field
+		b.WriteString(m.mainInputs[2].View() + "\n\n")
+		// index field
+		b.WriteString(m.mainInputs[3].View() + "\n\n")
+		for j := 0; j <= 2; j++ {
+			b.WriteString("\t (" + strconv.Itoa(j) + ") " + tuiutils.GetCurveName(archethic.Curve(j)) + "\n")
+		}
 	}
 
 	b.WriteString("> Transaction type:\n")
 	b.WriteString(transactionTypeView(m))
 
 	button := &blurredButton
-	if m.focusInput == 15 {
+	if m.focusInput == 17 {
 		button = &focusedButton
 	}
 	fmt.Fprintf(&b, "\n\n%s\n\n", *button)
@@ -766,7 +847,7 @@ func urlView(m Model) string {
 
 	for i := 0; i < len(urlType); i++ {
 		var u string
-		if m.url == urlType[i] {
+		if m.mainInputs[0].Value() == urls[urlType[i]] {
 			u = "(•) "
 		} else {
 			u = "( ) "
@@ -794,7 +875,7 @@ func transactionTypeView(m Model) string {
 			u = "( ) "
 		}
 		u += t
-		if m.focusInput == i+6 {
+		if m.focusInput == i+8 {
 			s.WriteString(focusedStyle.Render(u))
 		} else {
 			s.WriteString(u)

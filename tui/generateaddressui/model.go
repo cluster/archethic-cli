@@ -7,6 +7,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/archethic-foundation/archethic-cli/tui/tuiutils"
 	archethic "github.com/archethic-foundation/libgo"
 	"github.com/charmbracelet/bubbles/textinput"
 	tea "github.com/charmbracelet/bubbletea"
@@ -27,34 +28,6 @@ var (
 	focusedButton = focusedStyle.Copy().Render("[ Submit ]")
 	blurredButton = fmt.Sprintf("[ %s ]", blurredStyle.Render("Submit"))
 )
-
-func GetHashAlgorithmName(h archethic.HashAlgo) string {
-	switch h {
-	case archethic.SHA256:
-		return "SHA256"
-	case archethic.SHA512:
-		return "SHA512"
-	case archethic.SHA3_256:
-		return "SHA3_256"
-	case archethic.SHA3_512:
-		return "SHA3_512"
-	case archethic.BLAKE2B:
-		return "BLAKE2B"
-	}
-	panic("Unknown hash algorithm")
-}
-
-func GetCurveName(h archethic.Curve) string {
-	switch h {
-	case archethic.ED25519:
-		return "ED25519"
-	case archethic.P256:
-		return "P256"
-	case archethic.SECP256K1:
-		return "SECP256K1"
-	}
-	panic("Unknown curve")
-}
 
 type Model struct {
 	focusIndex       int
@@ -223,13 +196,13 @@ func (m Model) View() string {
 		if i == 2 {
 			b.WriteString("\n")
 			for j := 0; j <= 2; j++ {
-				b.WriteString("\t (" + strconv.Itoa(j) + ") " + GetCurveName(archethic.Curve(j)) + "\n")
+				b.WriteString("\t (" + strconv.Itoa(j) + ") " + tuiutils.GetCurveName(archethic.Curve(j)) + "\n")
 			}
 		}
 		if i == 3 {
 			b.WriteString("\n")
 			for j := 0; j <= 4; j++ {
-				b.WriteString("\t (" + strconv.Itoa(j) + ") " + GetHashAlgorithmName(archethic.HashAlgo(j)) + "\n")
+				b.WriteString("\t (" + strconv.Itoa(j) + ") " + tuiutils.GetHashAlgorithmName(archethic.HashAlgo(j)) + "\n")
 			}
 		}
 		if i < len(m.inputs)-1 {
