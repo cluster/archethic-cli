@@ -90,6 +90,7 @@ type Model struct {
 	serviceName                string
 	serviceMode                bool
 	feedback                   string
+	selectedUrl                string
 }
 
 func New() Model {
@@ -187,8 +188,10 @@ func New() Model {
 	m.contentTextAreaInput = textarea.New()
 	// passing 0 or a negative number here doesn't seem to work...
 	m.contentTextAreaInput.CharLimit = 100000000000
+	m.contentTextAreaInput.SetWidth(150)
 	m.smartContractTextAreaInput = textarea.New()
 	m.smartContractTextAreaInput.CharLimit = 100000000000
+	m.smartContractTextAreaInput.SetWidth(150)
 
 	return m
 }
@@ -216,7 +219,6 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		initParams := CreateTransactionMsg(msg)
 		m.mainInputs[1].SetValue(initParams.Seed)
 		m.mainInputs[0].SetValue(initParams.Url)
-		// m.url = initParams.Url
 		m.serviceName = initParams.ServiceName
 		m.serviceMode = m.serviceName != ""
 		if m.serviceMode {
@@ -299,6 +301,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				if m.focusInput < 6 {
 					u := urlType[m.focusInput]
 					m.mainInputs[0].SetValue(urls[u])
+					m.selectedUrl = u
 					m.focusInput = 4
 					m.storageNouncePublicKey = ""
 				} else if m.focusInput > 7 && m.focusInput < 17 {
@@ -362,7 +365,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 						})
 
 						ts.AddOnError(func(sender, message string) {
-							m.feedback = "Transaction error" + message
+							m.feedback = "Transaction error: " + message
 						})
 
 						ts.SendTransaction(&m.transaction, 100, 60)
@@ -609,7 +612,7 @@ var (
 	activeTabBorder   = tabBorderWithBottom("┘", " ", "└")
 	docStyle          = lipgloss.NewStyle().Padding(1, 2, 1, 2)
 	highlightColor    = lipgloss.AdaptiveColor{Light: "#874BFD", Dark: "#7D56F4"}
-	inactiveTabStyle  = lipgloss.NewStyle().Border(inactiveTabBorder, true).BorderForeground(highlightColor).Padding(0, 1)
+	inactiveTabStyle  = lipgloss.NewStyle().Border(inactiveTabBorder, true).BorderForeground(highlightColor).Padding(0, 5)
 	activeTabStyle    = inactiveTabStyle.Copy().Border(activeTabBorder, true)
 	windowStyle       = lipgloss.NewStyle().BorderForeground(highlightColor).Padding(2, 0).Align(lipgloss.Left).Border(lipgloss.NormalBorder()).UnsetBorderTop()
 )
@@ -822,11 +825,11 @@ func main(m Model) string {
 		b.WriteString(m.mainInputs[1].View() + "\n\n")
 		// curve field
 		b.WriteString(m.mainInputs[2].View() + "\n\n")
-		// index field
-		b.WriteString(m.mainInputs[3].View() + "\n\n")
 		for j := 0; j <= 2; j++ {
 			b.WriteString("\t (" + strconv.Itoa(j) + ") " + tuiutils.GetCurveName(archethic.Curve(j)) + "\n")
 		}
+		// index field
+		b.WriteString(m.mainInputs[3].View() + "\n\n")
 	}
 
 	b.WriteString("> Transaction type:\n")
@@ -847,7 +850,7 @@ func urlView(m Model) string {
 
 	for i := 0; i < len(urlType); i++ {
 		var u string
-		if m.mainInputs[0].Value() == urls[urlType[i]] {
+		if m.selectedUrl == urlType[i] {
 			u = "(•) "
 		} else {
 			u = "( ) "
