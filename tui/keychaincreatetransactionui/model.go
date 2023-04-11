@@ -70,11 +70,29 @@ var (
 )
 
 type RenderFunc func(m Model) string
+type createTransactionTab int
+
+const (
+	MAIN_TAB           createTransactionTab = 0
+	UCO_TAB            createTransactionTab = 1
+	TOKEN_TAB          createTransactionTab = 2
+	RECIPIENTS_TAB     createTransactionTab = 3
+	OWNERSHIPS_TAB     createTransactionTab = 4
+	CONTENT_TAB        createTransactionTab = 5
+	SMART_CONTRACT_TAB createTransactionTab = 6
+)
+
+const (
+	MAIN_ADD_BUTTON_INDEX         = 17
+	FIRST_TRANSACTION_TYPE_INDEX  = 8
+	URL_INDEX                     = 4
+	TRANSACTION_INDEX_FIELD_INDEX = 7
+)
 
 type Model struct {
 	Tabs                       []string
 	TabContent                 []RenderFunc
-	activeTab                  int
+	activeTab                  createTransactionTab
 	focusInput                 int
 	mainInputs                 []textinput.Model
 	contentTextAreaInput       textarea.Model
@@ -102,7 +120,7 @@ func New() Model {
 		tokenInputs:      make([]textinput.Model, 4),
 		ownershipsInputs: make([]textinput.Model, 2),
 		focusInput:       0,
-		activeTab:        0,
+		activeTab:        MAIN_TAB,
 		transaction:      *archethic.NewTransaction(archethic.KeychainAccessType),
 		secretKey:        key,
 	}
@@ -222,207 +240,83 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.serviceName = initParams.ServiceName
 		m.serviceMode = m.serviceName != ""
 		if m.serviceMode {
-			m.focusInput = 6
+			m.focusInput = FIRST_TRANSACTION_TYPE_INDEX
 		}
 	case tea.KeyMsg:
-		switch keypress := msg.String(); keypress {
-		case "esc":
-			if m.activeTab == 5 && m.contentTextAreaInput.Focused() {
-				m.contentTextAreaInput.Blur()
-				return m, nil
-			}
-
-			if m.activeTab == 6 && m.smartContractTextAreaInput.Focused() {
-				m.smartContractTextAreaInput.Blur()
-				return m, nil
-			}
-
+		event, value := GetState(msg.String(), &m)
+		switch event {
+		case CONTENT_QUIT_EDIT_MODE:
+			m.contentTextAreaInput.Blur()
+			return m, nil
+		case SMART_CONTRACT_QUIT_EDIT_MODE:
+			m.smartContractTextAreaInput.Blur()
+			return m, nil
+		case BACK_TO_MAIN_MENU:
 			return m, func() tea.Msg {
 				return BackMsg(true)
 			}
-		case "ctrl+c":
+		case QUIT:
 			return m, tea.Quit
-		case "right", "tab":
-			switch m.activeTab {
-			case 5:
-				if !m.contentTextAreaInput.Focused() {
-					m.activeTab = min(m.activeTab+1, len(m.Tabs)-1)
-					m.focusInput = 0
-					return m, nil
-				}
-			case 6:
-				if !m.smartContractTextAreaInput.Focused() {
-					m.activeTab = min(m.activeTab+1, len(m.Tabs)-1)
-					m.focusInput = 0
-					return m, nil
-				}
-			default:
-				m.activeTab = min(m.activeTab+1, len(m.Tabs)-1)
-				m.focusInput = 0
-				return m, nil
-			}
-
-		case "left", "shift+tab":
-
-			switch m.activeTab {
-			case 5:
-				if !m.contentTextAreaInput.Focused() {
-					m.activeTab = max(m.activeTab-1, 0)
-					m.focusInput = 0
-					return m, nil
-				}
-			case 6:
-				if !m.smartContractTextAreaInput.Focused() {
-					m.activeTab = max(m.activeTab-1, 0)
-					m.focusInput = 0
-					return m, nil
-				}
-			default:
-				m.activeTab = max(m.activeTab-1, 0)
-				m.focusInput = 0
-				return m, nil
-			}
-
-		case "up", "down":
-			m = getFocusIndex(m, keypress)
-			// if the seed or the curve is updated, fetch the index
-			if m.activeTab == 0 && (m.focusInput == 4 || m.focusInput == 7) {
-				client := archethic.NewAPIClient(m.mainInputs[0].Value())
-				seed := archethic.MaybeConvertToHex(m.mainInputs[1].Value())
-				address := archethic.DeriveAddress(seed, 0, getCurve(m), archethic.SHA256)
-				addressHex := hex.EncodeToString(address)
-				index := client.GetLastTransactionIndex(addressHex)
-				m.mainInputs[3].SetValue(fmt.Sprint(index))
-			}
-		case "enter":
-			switch m.activeTab {
-			case 0:
-
-				if m.focusInput < 6 {
-					u := urlType[m.focusInput]
-					m.mainInputs[0].SetValue(urls[u])
-					m.selectedUrl = u
-					m.focusInput = 4
-					m.storageNouncePublicKey = ""
-				} else if m.focusInput > 7 && m.focusInput < 17 {
-					t := transactionTypesList[m.focusInput-8]
-					m.transaction.SetType(transactionTypes[t])
-					m.focusInput = 17
-				} else if m.focusInput == 17 {
-					m.feedback = ""
-					if len(m.transaction.Data.Code) > 0 {
-
-						ownershipIndex := -1
-						for i, ownership := range m.transaction.Data.Ownerships {
-							decodedSecret := string(archethic.AesDecrypt(ownership.Secret, m.secretKey))
-
-							if reflect.DeepEqual(decodedSecret, string(archethic.MaybeConvertToHex(m.mainInputs[1].Value()))) {
-								ownershipIndex = i
-								break
-							}
-						}
-
-						if ownershipIndex == -1 {
-							m.feedback = "1You need to create an ownership with the transaction seed as secret and authorize node public key to let nodes generate new transaction from your smart contract"
-						} else {
-							authorizedKeyIndex := -1
-							for i, authKey := range m.transaction.Data.Ownerships[ownershipIndex].AuthorizedKeys {
-								if strings.ToUpper(hex.EncodeToString(authKey.PublicKey)) == m.storageNouncePublicKey {
-									authorizedKeyIndex = i
-									break
-								}
-							}
-
-							if authorizedKeyIndex == -1 {
-								m.feedback = "2You need to create an ownership with the transaction seed as secret and authorize node public key to let nodes generate new transaction from your smart contract"
-							}
-						}
-					}
-
-					if m.feedback == "" {
-						url := m.mainInputs[0].Value()
-						client := archethic.NewAPIClient(url)
-
-						seed := archethic.MaybeConvertToHex(m.mainInputs[1].Value())
-
-						if m.serviceMode {
-							m = buildKeychainTransaction(seed, client, m)
-						} else {
-							index, err := strconv.ParseUint(m.mainInputs[3].Value(), 10, 32)
-							if err != nil {
-								index = 0
-							}
-							curve := getCurve(m)
-							m.transaction.Build(seed, uint32(index), curve, archethic.SHA256)
-
-						}
-						originPrivateKey, _ := hex.DecodeString("01019280BDB84B8F8AEDBA205FE3552689964A5626EE2C60AA10E3BF22A91A036009")
-						m.transaction.OriginSign(originPrivateKey)
-
-						ts := archethic.NewTransactionSender(client)
-						ts.AddOnSent(func() {
-							m.feedback = "Transaction sent: " + url + "/explorer/transaction/" + strings.ToUpper(hex.EncodeToString(m.transaction.Address))
-						})
-
-						ts.AddOnError(func(sender, message string) {
-							m.feedback = "Transaction error: " + message
-						})
-
-						ts.SendTransaction(&m.transaction, 100, 60)
-					}
-				}
-
-			case 1:
-				if m.focusInput == len(m.ucoInputs) {
-					addUcoTransfer(&m)
-				}
-			case 2:
-				if m.focusInput == len(m.tokenInputs) {
-					addTokenTransfer(&m)
-				}
-			case 3:
-				if m.focusInput == 1 || m.focusInput == 0 {
-					addRecipient(&m)
-				}
-			case 4:
-				switch m.focusInput {
-				case len(m.ownershipsInputs) + len(m.authorizedKeys):
-					addAuthorizedKey(&m)
-				case len(m.ownershipsInputs) + len(m.authorizedKeys) + 1:
-					loadStorageNouncePublicKey(&m)
-				case len(m.ownershipsInputs) + len(m.authorizedKeys) + 2:
-					addOwnership(&m)
-				}
-			}
-		case "d":
-			switch m.activeTab {
-			case 1:
-				if m.focusInput > len(m.ucoInputs) {
-					deleteUcoTransfer(&m)
-				}
-			case 2:
-				if m.focusInput > len(m.tokenInputs) {
-					deleteTokenTransfer(&m)
-				}
-			case 3:
-				if m.focusInput > 1 {
-					deleteRecipient(&m)
-				}
-			case 4:
-				if m.focusInput > len(m.ownershipsInputs)-1 && m.focusInput < len(m.ownershipsInputs)+len(m.authorizedKeys) {
-					deleteAuthorizedKey(&m)
-				} else if m.focusInput > len(m.ownershipsInputs)+len(m.authorizedKeys)+2 {
-					deleteOwnership(&m)
-				}
-			}
-		default:
-			switch m.activeTab {
-			case 5:
-				m.transaction.SetContent([]byte(m.contentTextAreaInput.Value()))
-			case 6:
-				m.transaction.SetCode(m.smartContractTextAreaInput.Value())
-			}
+		case SWITCH_NEXT_TAB:
+			m.activeTab = createTransactionTab(min(int(m.activeTab)+1, len(m.Tabs)-1))
+		case SWITCH_PREVIOUS_TAB:
+			m.activeTab = createTransactionTab(max(int(m.activeTab)-1, 0))
+		case UPDATE_TRANSACTION_INDEX:
+			client := archethic.NewAPIClient(m.mainInputs[0].Value())
+			seed := archethic.MaybeConvertToHex(m.mainInputs[1].Value())
+			address := archethic.DeriveAddress(seed, 0, getCurve(&m), archethic.SHA256)
+			addressHex := hex.EncodeToString(address)
+			index := client.GetLastTransactionIndex(addressHex)
+			m.mainInputs[3].SetValue(fmt.Sprint(index))
+		case UPDATE_URL:
+			urlIndex, _ := value.(int)
+			u := urlType[urlIndex]
+			m.mainInputs[0].SetValue(urls[u])
+			m.selectedUrl = u
+			m.storageNouncePublicKey = ""
+		case UPDATE_TRANSACTION_TYPE:
+			typeIndex, _ := value.(string)
+			m.transaction.SetType(transactionTypes[typeIndex])
+		case SEND_TRANSACTION:
+			sendTransaction(&m)
+		case ADD_UCO_TRANSFER:
+			addUcoTransfer(&m)
+		case ADD_TOKEN_TRANSFER:
+			addTokenTransfer(&m)
+		case ADD_RECIPIENT:
+			addRecipient(&m)
+		case ADD_AUTHORIZED_KEY:
+			addAuthorizedKey(&m)
+		case ADD_OWNERSHIP:
+			addOwnership(&m)
+		case DELETE_UCO_TRANSFER:
+			indexToDelete, _ := value.(int)
+			deleteUcoTransfer(&m, indexToDelete)
+			return m, nil
+		case DELETE_TOKEN_TRANSFER:
+			indexToDelete, _ := value.(int)
+			deleteTokenTransfer(&m, indexToDelete)
+			return m, nil
+		case DELETE_RECIPIENT:
+			indexToDelete, _ := value.(int)
+			deleteRecipient(&m, indexToDelete)
+			return m, nil
+		case DELETE_AUTHORIZED_KEY:
+			indexToDelete, _ := value.(int)
+			deleteAuthorizedKey(&m, indexToDelete)
+			return m, nil
+		case DELETE_OWNERSHIP:
+			indexToDelete, _ := value.(int)
+			deleteOwnership(&m, indexToDelete)
+			return m, nil
+		case LOAD_STORAGE_NOUNCE_PUBLIC_KEY:
+			loadStorageNouncePublicKey(&m)
+		case UPDATE_CONTENT:
+			m.transaction.SetContent([]byte(m.contentTextAreaInput.Value()))
+		case UPDATE_SMART_CONTRACT:
+			m.transaction.SetCode(m.smartContractTextAreaInput.Value())
 		}
+
 	}
 	m, cmds := updateFocus(m)
 
@@ -434,33 +328,33 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 func (m *Model) updateInputs(msg tea.Msg) []tea.Cmd {
 	var cmds []tea.Cmd
 	switch m.activeTab {
-	case 0:
+	case MAIN_TAB:
 		cmds := make([]tea.Cmd, len(m.mainInputs))
 		for i := range m.mainInputs {
 			m.mainInputs[i], cmds[i] = m.mainInputs[i].Update(msg)
 		}
-	case 1:
+	case UCO_TAB:
 		cmds := make([]tea.Cmd, len(m.ucoInputs))
 		for i := range m.ucoInputs {
 			m.ucoInputs[i], cmds[i] = m.ucoInputs[i].Update(msg)
 		}
-	case 2:
+	case TOKEN_TAB:
 		cmds := make([]tea.Cmd, len(m.tokenInputs))
 		for i := range m.tokenInputs {
 			m.tokenInputs[i], cmds[i] = m.tokenInputs[i].Update(msg)
 		}
-	case 3:
+	case RECIPIENTS_TAB:
 		cmds := make([]tea.Cmd, 1)
 		m.recipientsInput, cmds[0] = m.recipientsInput.Update(msg)
-	case 4:
+	case OWNERSHIPS_TAB:
 		cmds := make([]tea.Cmd, len(m.ownershipsInputs))
 		for i := range m.ownershipsInputs {
 			m.ownershipsInputs[i], cmds[i] = m.ownershipsInputs[i].Update(msg)
 		}
-	case 5:
+	case CONTENT_TAB:
 		cmds := make([]tea.Cmd, 1)
 		m.contentTextAreaInput, cmds[0] = m.contentTextAreaInput.Update(msg)
-	case 6:
+	case SMART_CONTRACT_TAB:
 		cmds := make([]tea.Cmd, 1)
 		m.smartContractTextAreaInput, cmds[0] = m.smartContractTextAreaInput.Update(msg)
 	}
@@ -471,10 +365,11 @@ func (m *Model) updateInputs(msg tea.Msg) []tea.Cmd {
 func updateFocus(m Model) (Model, []tea.Cmd) {
 	var cmds []tea.Cmd
 	switch m.activeTab {
-	case 0:
+	case MAIN_TAB:
 		cmds := make([]tea.Cmd, len(m.mainInputs))
 		for i := 0; i <= len(m.mainInputs)-1; i++ {
-			if i == m.focusInput-4 {
+			// the first 4 inputs are not focusable fields (node endpoints for URL)
+			if i == m.focusInput-len(urlType) {
 				// Set focused state
 				cmds[i] = m.mainInputs[i].Focus()
 				continue
@@ -485,7 +380,7 @@ func updateFocus(m Model) (Model, []tea.Cmd) {
 			m.mainInputs[i].TextStyle = noStyle
 		}
 
-	case 1:
+	case UCO_TAB:
 
 		cmds := make([]tea.Cmd, len(m.ucoInputs))
 		for i := 0; i <= len(m.ucoInputs)-1; i++ {
@@ -500,7 +395,7 @@ func updateFocus(m Model) (Model, []tea.Cmd) {
 			m.ucoInputs[i].TextStyle = noStyle
 		}
 
-	case 2:
+	case TOKEN_TAB:
 
 		cmds := make([]tea.Cmd, len(m.tokenInputs))
 		for i := 0; i <= len(m.tokenInputs)-1; i++ {
@@ -515,7 +410,7 @@ func updateFocus(m Model) (Model, []tea.Cmd) {
 			m.tokenInputs[i].TextStyle = noStyle
 		}
 
-	case 3:
+	case RECIPIENTS_TAB:
 		if m.focusInput == 0 {
 			cmds = append(cmds, m.recipientsInput.Focus())
 			m.recipientsInput.PromptStyle = focusedStyle
@@ -525,7 +420,7 @@ func updateFocus(m Model) (Model, []tea.Cmd) {
 			m.recipientsInput.PromptStyle = noStyle
 			m.recipientsInput.TextStyle = noStyle
 		}
-	case 4:
+	case OWNERSHIPS_TAB:
 		cmds := make([]tea.Cmd, len(m.ownershipsInputs))
 		for i := 0; i <= len(m.ownershipsInputs)-1; i++ {
 			if i == m.focusInput {
@@ -538,65 +433,14 @@ func updateFocus(m Model) (Model, []tea.Cmd) {
 			m.ownershipsInputs[i].PromptStyle = noStyle
 			m.ownershipsInputs[i].TextStyle = noStyle
 		}
-	case 5:
+	case CONTENT_TAB:
 		cmds := make([]tea.Cmd, 1)
 		cmds[0] = m.contentTextAreaInput.Focus()
-	case 6:
+	case SMART_CONTRACT_TAB:
 		cmds := make([]tea.Cmd, 1)
 		cmds[0] = m.smartContractTextAreaInput.Focus()
-
 	}
 	return m, cmds
-}
-
-func getFocusIndex(m Model, keypress string) Model {
-	if keypress == "up" {
-		m.focusInput--
-	} else {
-		m.focusInput++
-	}
-	switch m.activeTab {
-	case 0:
-		if m.serviceMode {
-			if m.focusInput > 17 {
-				m.focusInput = 8
-			} else if m.focusInput < 8 {
-				m.focusInput = 17
-			}
-		} else {
-			if m.focusInput > 17 {
-				m.focusInput = 0
-			} else if m.focusInput < 0 {
-				m.focusInput = 17
-			}
-		}
-
-	case 1:
-		if m.focusInput > len(m.ucoInputs)+len(m.transaction.Data.Ledger.Uco.Transfers) {
-			m.focusInput = 0
-		} else if m.focusInput < 0 {
-			m.focusInput = len(m.ucoInputs) + len(m.transaction.Data.Ledger.Uco.Transfers)
-		}
-	case 2:
-		if m.focusInput > len(m.tokenInputs)+len(m.transaction.Data.Ledger.Token.Transfers) {
-			m.focusInput = 0
-		} else if m.focusInput < 0 {
-			m.focusInput = len(m.tokenInputs) + len(m.transaction.Data.Ledger.Token.Transfers)
-		}
-	case 3:
-		if m.focusInput > 1+1+len(m.transaction.Data.Recipients) {
-			m.focusInput = 0
-		} else if m.focusInput < 0 {
-			m.focusInput = 1 + 1 + len(m.transaction.Data.Recipients)
-		}
-	case 4:
-		if m.focusInput > len(m.ownershipsInputs)+len(m.authorizedKeys)+len(m.transaction.Data.Ownerships)+2 {
-			m.focusInput = 0
-		} else if m.focusInput < 0 {
-			m.focusInput = len(m.ownershipsInputs) + len(m.authorizedKeys) + len(m.transaction.Data.Ownerships) + 2
-		}
-	}
-	return m
 }
 
 func tabBorderWithBottom(left, middle, right string) lipgloss.Border {
@@ -624,7 +468,7 @@ func (m Model) View() string {
 
 	for i, t := range m.Tabs {
 		var style lipgloss.Style
-		isFirst, isLast, isActive := i == 0, i == len(m.Tabs)-1, i == m.activeTab
+		isFirst, isLast, isActive := i == 0, i == len(m.Tabs)-1, i == int(m.activeTab)
 		if isActive {
 			style = activeTabStyle.Copy()
 		} else {
@@ -664,7 +508,8 @@ func min(a, b int) int {
 	}
 	return b
 }
-func getCurve(m Model) archethic.Curve {
+
+func getCurve(m *Model) archethic.Curve {
 	curveInt, err := strconv.Atoi(m.mainInputs[2].Value())
 	if err != nil {
 		curveInt = 0
@@ -688,10 +533,8 @@ func addUcoTransfer(m *Model) {
 	m.ucoInputs[1].SetValue("")
 }
 
-func deleteUcoTransfer(m *Model) {
-	focusIndex := m.focusInput - len(m.ucoInputs) - 1
-	m.transaction.Data.Ledger.Uco.Transfers = append(m.transaction.Data.Ledger.Uco.Transfers[:focusIndex], m.transaction.Data.Ledger.Uco.Transfers[focusIndex+1:]...)
-	m.focusInput--
+func deleteUcoTransfer(m *Model, indexToDelete int) {
+	m.transaction.Data.Ledger.Uco.Transfers = append(m.transaction.Data.Ledger.Uco.Transfers[:indexToDelete], m.transaction.Data.Ledger.Uco.Transfers[indexToDelete+1:]...)
 }
 
 func addTokenTransfer(m *Model) {
@@ -723,10 +566,8 @@ func addTokenTransfer(m *Model) {
 	m.tokenInputs[3].SetValue("")
 }
 
-func deleteTokenTransfer(m *Model) {
-	focusIndex := m.focusInput - len(m.tokenInputs) - 1
-	m.transaction.Data.Ledger.Token.Transfers = append(m.transaction.Data.Ledger.Token.Transfers[:focusIndex], m.transaction.Data.Ledger.Token.Transfers[focusIndex+1:]...)
-	m.focusInput--
+func deleteTokenTransfer(m *Model, indexToDelete int) {
+	m.transaction.Data.Ledger.Token.Transfers = append(m.transaction.Data.Ledger.Token.Transfers[:indexToDelete], m.transaction.Data.Ledger.Token.Transfers[indexToDelete+1:]...)
 }
 
 func addRecipient(m *Model) {
@@ -739,10 +580,8 @@ func addRecipient(m *Model) {
 	m.recipientsInput.SetValue("")
 }
 
-func deleteRecipient(m *Model) {
-	focusIndex := m.focusInput - 1 - 1
-	m.transaction.Data.Recipients = append(m.transaction.Data.Recipients[:focusIndex], m.transaction.Data.Recipients[focusIndex+1:]...)
-	m.focusInput--
+func deleteRecipient(m *Model, indexToDelete int) {
+	m.transaction.Data.Recipients = append(m.transaction.Data.Recipients[:indexToDelete], m.transaction.Data.Recipients[indexToDelete+1:]...)
 }
 
 func addOwnership(m *Model) {
@@ -771,10 +610,8 @@ func addOwnership(m *Model) {
 	m.ownershipsInputs[1].SetValue("")
 }
 
-func deleteOwnership(m *Model) {
-	focusIndex := m.focusInput - len(m.ownershipsInputs) - len(m.authorizedKeys) - 3
-	m.transaction.Data.Ownerships = append(m.transaction.Data.Ownerships[:focusIndex], m.transaction.Data.Ownerships[focusIndex+1:]...)
-	m.focusInput--
+func deleteOwnership(m *Model, indexToDelete int) {
+	m.transaction.Data.Ownerships = append(m.transaction.Data.Ownerships[:indexToDelete], m.transaction.Data.Ownerships[indexToDelete+1:]...)
 }
 
 func addAuthorizedKey(m *Model) {
@@ -783,10 +620,8 @@ func addAuthorizedKey(m *Model) {
 	m.ownershipsInputs[1].SetValue("")
 }
 
-func deleteAuthorizedKey(m *Model) {
-	focusIndex := m.focusInput - len(m.ownershipsInputs)
-	m.authorizedKeys = append(m.authorizedKeys[:focusIndex], m.authorizedKeys[focusIndex+1:]...)
-	m.focusInput--
+func deleteAuthorizedKey(m *Model, indexToDelete int) {
+	m.authorizedKeys = append(m.authorizedKeys[:indexToDelete], m.authorizedKeys[indexToDelete+1:]...)
 }
 
 func loadStorageNouncePublicKey(m *Model) {
@@ -799,7 +634,7 @@ func loadStorageNouncePublicKey(m *Model) {
 	m.ownershipsInputs[1].SetValue(m.storageNouncePublicKey)
 }
 
-func buildKeychainTransaction(seed []byte, client *archethic.APIClient, m Model) Model {
+func buildKeychainTransaction(seed []byte, client *archethic.APIClient, m *Model) {
 	keychain := archethic.GetKeychain(seed, *client)
 
 	m.transaction.Version = uint32(keychain.Version)
@@ -809,11 +644,78 @@ func buildKeychainTransaction(seed []byte, client *archethic.APIClient, m Model)
 	index := client.GetLastTransactionIndex(hex.EncodeToString(genesisAddress))
 
 	m.transaction = keychain.BuildTransaction(m.transaction, m.serviceName, uint8(index))
-	return m
 }
 
+func sendTransaction(m *Model) {
+	m.feedback = ""
+	if len(m.transaction.Data.Code) > 0 {
+
+		ownershipIndex := -1
+		for i, ownership := range m.transaction.Data.Ownerships {
+			decodedSecret := string(archethic.AesDecrypt(ownership.Secret, m.secretKey))
+
+			if reflect.DeepEqual(decodedSecret, string(archethic.MaybeConvertToHex(m.mainInputs[1].Value()))) {
+				ownershipIndex = i
+				break
+			}
+		}
+
+		if ownershipIndex == -1 {
+			m.feedback = "You need to create an ownership with the transaction seed as secret and authorize node public key to let nodes generate new transaction from your smart contract"
+		} else {
+			authorizedKeyIndex := -1
+			for i, authKey := range m.transaction.Data.Ownerships[ownershipIndex].AuthorizedKeys {
+				if strings.ToUpper(hex.EncodeToString(authKey.PublicKey)) == m.storageNouncePublicKey {
+					authorizedKeyIndex = i
+					break
+				}
+			}
+
+			if authorizedKeyIndex == -1 {
+				m.feedback = "You need to create an ownership with the transaction seed as secret and authorize node public key to let nodes generate new transaction from your smart contract"
+			}
+		}
+	}
+
+	if m.feedback == "" {
+		url := m.mainInputs[0].Value()
+		client := archethic.NewAPIClient(url)
+
+		seed := archethic.MaybeConvertToHex(m.mainInputs[1].Value())
+
+		if m.serviceMode {
+			buildKeychainTransaction(seed, client, m)
+		} else {
+			index, err := strconv.ParseUint(m.mainInputs[3].Value(), 10, 32)
+			if err != nil {
+				index = 0
+			}
+			curve := getCurve(m)
+			m.transaction.Build(seed, uint32(index), curve, archethic.SHA256)
+
+		}
+		originPrivateKey, _ := hex.DecodeString("01019280BDB84B8F8AEDBA205FE3552689964A5626EE2C60AA10E3BF22A91A036009")
+		m.transaction.OriginSign(originPrivateKey)
+
+		ts := archethic.NewTransactionSender(client)
+		ts.AddOnSent(func() {
+			m.feedback = "Transaction sent: " + url + "/explorer/transaction/" + strings.ToUpper(hex.EncodeToString(m.transaction.Address))
+		})
+
+		ts.AddOnError(func(sender, message string) {
+			m.feedback = "Transaction error: " + message
+		})
+
+		ts.SendTransaction(&m.transaction, 100, 60)
+	}
+}
+
+// Functions to build the view
+
+// View of the main tab
 func main(m Model) string {
 	var b strings.Builder
+	// Only display the node endpoint, seed, curve and index fields if we are not building a transaction for a service
 	if m.serviceMode {
 		b.WriteString("Creating transaction for service " + m.serviceName + "\n\n")
 	} else {
@@ -832,11 +734,13 @@ func main(m Model) string {
 		b.WriteString(m.mainInputs[3].View() + "\n\n")
 	}
 
+	// transaction type field
 	b.WriteString("> Transaction type:\n")
 	b.WriteString(transactionTypeView(m))
 
+	// send transaction button
 	button := &blurredButton
-	if m.focusInput == 17 {
+	if m.focusInput == MAIN_ADD_BUTTON_INDEX {
 		button = &focusedButton
 	}
 	fmt.Fprintf(&b, "\n\n%s\n\n", *button)
@@ -845,6 +749,8 @@ func main(m Model) string {
 	return b.String()
 }
 
+// URL part of the main tab
+// looping through the urlType array to display the different options
 func urlView(m Model) string {
 	s := strings.Builder{}
 
@@ -867,6 +773,7 @@ func urlView(m Model) string {
 	return s.String()
 }
 
+// Transaction type part of the main tab
 func transactionTypeView(m Model) string {
 	s := strings.Builder{}
 
@@ -878,7 +785,7 @@ func transactionTypeView(m Model) string {
 			u = "( ) "
 		}
 		u += t
-		if m.focusInput == i+8 {
+		if m.focusInput == i+FIRST_TRANSACTION_TYPE_INDEX {
 			s.WriteString(focusedStyle.Render(u))
 		} else {
 			s.WriteString(u)
@@ -889,6 +796,7 @@ func transactionTypeView(m Model) string {
 	return s.String()
 }
 
+// View of the UCO transfer tab
 func ucoTransfer(m Model) string {
 	var b strings.Builder
 	for i := range m.ucoInputs {
@@ -919,6 +827,7 @@ func ucoTransfer(m Model) string {
 	return b.String()
 }
 
+// View of the token transfer tab
 func tokenTransfer(m Model) string {
 	var b strings.Builder
 	for i := range m.tokenInputs {
@@ -949,6 +858,7 @@ func tokenTransfer(m Model) string {
 	return b.String()
 }
 
+// View of the recipients tab
 func recipients(m Model) string {
 	var b strings.Builder
 	b.WriteString(m.recipientsInput.View())
@@ -960,7 +870,7 @@ func recipients(m Model) string {
 	}
 	fmt.Fprintf(&b, "\n\n%s\n\n", *button)
 
-	startCount := 1 + 1 // +1 for the button
+	startCount := 2 // 1 for the input, 1 for the button
 	for i, t := range m.transaction.Data.Recipients {
 		recipient := fmt.Sprintf("%s\n", hex.EncodeToString(t))
 		if m.focusInput == startCount+i {
@@ -976,6 +886,7 @@ func recipients(m Model) string {
 	return b.String()
 }
 
+// View of the ownerships tab
 func ownerships(m Model) string {
 	var b strings.Builder
 	for i := range m.ownershipsInputs {
@@ -1016,7 +927,7 @@ func ownerships(m Model) string {
 	}
 	fmt.Fprintf(&b, "\n\n%s\n\n", *button)
 
-	startCount := len(m.ownershipsInputs) + len(m.authorizedKeys) + 3
+	startCount := len(m.ownershipsInputs) + len(m.authorizedKeys) + 3 // +3 for the buttons
 	for i, o := range m.transaction.Data.Ownerships {
 		ownerships := "**** "
 		for j := range o.AuthorizedKeys {
@@ -1036,6 +947,7 @@ func ownerships(m Model) string {
 	return b.String()
 }
 
+// View of the content tab
 func content(m Model) string {
 	var b strings.Builder
 
@@ -1048,6 +960,7 @@ func content(m Model) string {
 	return b.String()
 }
 
+// View of the smart contract tab
 func smartContract(m Model) string {
 	var b strings.Builder
 
