@@ -1,6 +1,8 @@
 package keychainmanagementui
 
 import (
+	"crypto/rand"
+	"encoding/hex"
 	"fmt"
 	"sort"
 	"strings"
@@ -26,6 +28,9 @@ var (
 	accessFocusedButton = focusedStyle.Copy().Render("[ Access Keychain ]")
 	accessBlurredButton = fmt.Sprintf("[ %s ]", blurredStyle.Render("Access Keychain"))
 
+	createFocusedButton = focusedStyle.Copy().Render("[ Create Keychain ]")
+	createBlurredButton = fmt.Sprintf("[ %s ]", blurredStyle.Render("Create Keychain"))
+
 	createTransactionFocusedButton       = focusedStyle.Copy().Render("[ Create Transaction ]")
 	createTransactionaccessBlurredButton = fmt.Sprintf("[ %s ]", blurredStyle.Render("Create Transaction"))
 	urlType                              = []string{"Local", "Testnet", "Mainnet", "Custom"}
@@ -37,12 +42,16 @@ var (
 )
 
 type Model struct {
-	focusIndex      int
-	inputs          []textinput.Model
-	keychain        *archethic.Keychain
-	serviceNames    []string
-	selectedUrl     string
-	selectedService int
+	focusIndex                       int
+	inputs                           []textinput.Model
+	keychain                         *archethic.Keychain
+	serviceNames                     []string
+	selectedUrl                      string
+	selectedService                  int
+	keychainSeed                     string
+	keychainTransactionAddress       string
+	keychainAccessTransactionAddress string
+	feedback                         string
 }
 
 func New() Model {
@@ -75,6 +84,7 @@ func (m Model) Init() tea.Cmd {
 }
 
 func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+	urlBlockSize := len(urlType)
 	switch msg := msg.(type) {
 	case tea.KeyMsg:
 		switch msg.String() {
@@ -86,20 +96,21 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				return BackMsg(true)
 			}
 
-		// Set focus to next input
-		case "tab", "shift+tab", "enter", "up", "down":
-			s := msg.String()
-
-			// Did the user press enter while the submit button was focused?
-			// If so, exit.
-			if s == "enter" && m.focusIndex < 4 {
+		case "enter":
+			if m.focusIndex < urlBlockSize {
 				u := urlType[m.focusIndex]
 				m.inputs[0].SetValue(urls[u])
 				m.selectedUrl = u
-				m.focusIndex = 3
+				m.focusIndex = urlBlockSize
 			}
 
-			if s == "enter" && m.focusIndex == len(m.inputs)+4 {
+			// create keychain button
+			if m.focusIndex == len(m.inputs)+urlBlockSize {
+				createKeychain(&m)
+			}
+
+			// access keychain button
+			if m.focusIndex == len(m.inputs)+5 {
 				url := m.inputs[0].Value()
 				seed := archethic.MaybeConvertToHex(m.inputs[1].Value())
 				client := archethic.NewAPIClient(url)
@@ -108,29 +119,33 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				for k := range m.keychain.Services {
 					m.serviceNames = append(m.serviceNames, k)
 				}
-
 				sort.Strings(m.serviceNames)
-
 			}
 
-			if s == "enter" && m.focusIndex > len(m.inputs)+4 {
-				m.selectedService = m.focusIndex - len(m.inputs) - 5
+			// select service
+			if m.focusIndex > len(m.inputs)+urlBlockSize+1 && m.focusIndex < len(m.inputs)+urlBlockSize+2+len(m.serviceNames) {
+				m.selectedService = m.focusIndex - len(m.inputs) - urlBlockSize - 2
 			}
 
-			if s == "enter" && m.focusIndex == len(m.inputs)+5+len(m.serviceNames) {
+			// redirect to create transaction
+			if m.focusIndex == len(m.inputs)+6+len(m.serviceNames) {
 				return m, func() tea.Msg {
 					return keychaincreatetransactionui.CreateTransactionMsg{
-						ServiceName: m.serviceNames[m.selectedService-1],
+						ServiceName: m.serviceNames[m.selectedService],
 						Url:         m.inputs[0].Value(),
 						Seed:        m.inputs[1].Value(),
 					}
 				}
 			}
 
+		// Set focus to next input
+		case "tab", "shift+tab", "up", "down":
+			s := msg.String()
+
 			// Cycle indexes
 			if s == "up" || s == "shift+tab" {
 				m.focusIndex--
-			} else {
+			} else if s == "down" || s == "tab" {
 				m.focusIndex++
 			}
 
@@ -139,43 +154,94 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			if serviceSize > 0 {
 				serviceSize++
 			}
-			if m.focusIndex > len(m.inputs)+4+serviceSize {
+			if m.focusIndex > len(m.inputs)+urlBlockSize+1+serviceSize {
 				m.focusIndex = 0
 			} else if m.focusIndex < 0 {
-				m.focusIndex = len(m.inputs) + 4 + serviceSize
+				m.focusIndex = len(m.inputs) + urlBlockSize + 1 + serviceSize
 			}
-
-			cmds := make([]tea.Cmd, len(m.inputs))
-			for i := 0; i <= len(m.inputs)-1; i++ {
-				if i == m.focusIndex-4 {
-					// Set focused state
-					cmds[i] = m.inputs[i].Focus()
-					continue
-				}
-				// Remove focused state
-				m.inputs[i].Blur()
-				m.inputs[i].PromptStyle = noStyle
-				m.inputs[i].TextStyle = noStyle
-			}
-
-			return m, tea.Batch(cmds...)
 		}
 	}
 
 	// Handle character input
-	cmd := m.updateInputs(msg)
+	cmds := m.updateInputs(msg)
 
-	return m, cmd
+	cmds = append(cmds, m.updateFocus(urlBlockSize)...)
+
+	return m, tea.Batch(cmds...)
 }
 
-func (m *Model) updateInputs(msg tea.Msg) tea.Cmd {
+func (m *Model) updateInputs(msg tea.Msg) []tea.Cmd {
 	cmds := make([]tea.Cmd, len(m.inputs))
 
 	for i := range m.inputs {
 		m.inputs[i], cmds[i] = m.inputs[i].Update(msg)
 	}
 
-	return tea.Batch(cmds...)
+	return cmds
+}
+
+func (m *Model) updateFocus(urlBlockSize int) []tea.Cmd {
+
+	cmds := make([]tea.Cmd, len(m.inputs))
+	for i := 0; i <= len(m.inputs)-1; i++ {
+		if i == m.focusIndex-urlBlockSize {
+			// Set focused state
+			cmds[i] = m.inputs[i].Focus()
+			continue
+		}
+		// Remove focused state
+		m.inputs[i].Blur()
+		m.inputs[i].PromptStyle = noStyle
+		m.inputs[i].TextStyle = noStyle
+	}
+
+	return cmds
+}
+
+func createKeychain(m *Model) {
+	url := m.inputs[0].Value()
+	accessSeed := archethic.MaybeConvertToHex(m.inputs[1].Value())
+	originPrivateKey, _ := hex.DecodeString("01019280BDB84B8F8AEDBA205FE3552689964A5626EE2C60AA10E3BF22A91A036009")
+
+	publicKey, _ := archethic.DeriveKeypair(accessSeed, 0, archethic.ED25519)
+
+	randomSeed := make([]byte, 32)
+	rand.Read(randomSeed)
+
+	accessAddress := archethic.DeriveAddress(accessSeed, 1, archethic.ED25519, archethic.SHA256)
+	keychainAddress := archethic.DeriveAddress(randomSeed, 1, archethic.ED25519, archethic.SHA256)
+
+	keychainTx := archethic.NewKeychainTransaction(randomSeed, [][]byte{publicKey})
+	keychainTx.OriginSign(originPrivateKey)
+
+	client := archethic.NewAPIClient(url)
+	ts := archethic.NewTransactionSender(client)
+	ts.AddOnConfirmation(func(nbConf int, maxConf int) {
+		m.feedback += "\nKeychain's transaction confirmed."
+
+		m.keychainSeed = hex.EncodeToString(randomSeed)
+		m.keychainTransactionAddress = fmt.Sprintf("%s/explorer/transaction/%x", url, keychainAddress)
+		ts.Unsubscribe("confirmation")
+
+		accessTx := archethic.NewAccessTransaction(accessSeed, keychainAddress)
+		accessTx.OriginSign(originPrivateKey)
+		ts2 := archethic.NewTransactionSender(client)
+		ts2.AddOnConfirmation(func(nbConf int, maxConf int) {
+			m.feedback += "\nKeychain access transaction confirmed."
+			ts2.Unsubscribe("confirmation")
+			m.keychainAccessTransactionAddress = fmt.Sprintf("%s/explorer/transaction/%x", url, accessAddress)
+		})
+		ts2.AddOnError(func(senderContext, message string) {
+			m.feedback += fmt.Sprintf("Access transaction error: %s", message)
+			ts.Unsubscribe("error")
+		})
+		ts2.SendTransaction(&accessTx, 100, 60)
+	})
+	ts.AddOnError(func(senderContext, message string) {
+		m.feedback += fmt.Sprintf("Keychain transaction error: %s", message)
+		ts.Unsubscribe("error")
+	})
+	ts.SendTransaction(&keychainTx, 100, 60)
 }
 
 func (m Model) View() string {
@@ -188,8 +254,21 @@ func (m Model) View() string {
 		b.WriteString(m.inputs[i].View())
 	}
 
+	createButton := &createBlurredButton
+	if m.focusIndex == len(m.inputs)+len(urlType) {
+		createButton = &createFocusedButton
+	}
+	fmt.Fprintf(&b, "\n\n%s", *createButton)
+
+	fmt.Fprintf(&b, "%s\n", m.feedback)
+	if m.keychainSeed != "" {
+		fmt.Fprintf(&b, "Keychain seed: %s\n", m.keychainSeed)
+		fmt.Fprintf(&b, "Keychain transaction: %s\n", m.keychainTransactionAddress)
+		fmt.Fprintf(&b, "Keychain access transaction: %s\n", m.keychainAccessTransactionAddress)
+	}
+
 	button := &accessBlurredButton
-	if m.focusIndex == len(m.inputs)+4 {
+	if m.focusIndex == len(m.inputs)+5 {
 		button = &accessFocusedButton
 	}
 	fmt.Fprintf(&b, "\n\n%s\n\n", *button)
@@ -204,7 +283,7 @@ func (m Model) View() string {
 				u = "( ) "
 			}
 			u += k + " : " + m.keychain.Services[k].DerivationPath + "\n"
-			if m.focusIndex == i+len(m.inputs)+5 {
+			if m.focusIndex == i+len(m.inputs)+6 {
 				b.WriteString(focusedStyle.Render(u))
 			} else {
 				b.WriteString(u)
@@ -213,7 +292,7 @@ func (m Model) View() string {
 		}
 
 		button := &createTransactionaccessBlurredButton
-		if m.focusIndex == len(m.inputs)+len(m.serviceNames)+5 {
+		if m.focusIndex == len(m.inputs)+len(m.serviceNames)+6 {
 			button = &createTransactionFocusedButton
 		}
 		fmt.Fprintf(&b, "\n\n%s\n\n", *button)
