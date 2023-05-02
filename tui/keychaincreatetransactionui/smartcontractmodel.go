@@ -40,6 +40,9 @@ func (m SmartContractModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, nil
 		default:
 
+			if !m.smartContractTextAreaInput.Focused() {
+				m.smartContractTextAreaInput.Focus()
+			}
 			m.smartContractTextAreaInput, _ = m.smartContractTextAreaInput.Update(msg)
 			return m, func() tea.Msg {
 				return UpdateSmartContract{Code: m.smartContractTextAreaInput.Value()}
@@ -49,31 +52,11 @@ func (m SmartContractModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	}
 
-	m, cmds := updateSmartContractFocus(m)
-	cmds = append(cmds, m.updateSmartContractInputs(msg)...)
-	return m, tea.Batch(cmds...)
-}
-
-func (m *SmartContractModel) updateSmartContractInputs(msg tea.Msg) []tea.Cmd {
-
-	cmds := make([]tea.Cmd, 1)
-	m.smartContractTextAreaInput, cmds[0] = m.smartContractTextAreaInput.Update(msg)
-
-	return cmds
-}
-
-func updateSmartContractFocus(m SmartContractModel) (SmartContractModel, []tea.Cmd) {
-
-	cmds := make([]tea.Cmd, 1)
-	cmds[0] = m.smartContractTextAreaInput.Focus()
-
-	return m, cmds
+	return m, nil
 }
 
 func (m *SmartContractModel) SwitchTab() (SmartContractModel, []tea.Cmd) {
-	m.smartContractTextAreaInput.Focus()
-	m2, cmds := updateSmartContractFocus(*m)
-	return m2, cmds
+	return *m, nil
 }
 
 func (m SmartContractModel) View() string {
