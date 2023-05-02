@@ -36,6 +36,8 @@ var (
 	blurredLoadStorageNouncePK = fmt.Sprintf("[ %s ]", blurredStyle.Render("Load Storage Nounce Public Key"))
 	focusedButton              = focusedStyle.Copy().Render("[ Add ]")
 	blurredButton              = fmt.Sprintf("[ %s ]", blurredStyle.Render("Add"))
+	focusedResetButton         = focusedStyle.Copy().Render("[ Reset ]")
+	blurredResetButton         = fmt.Sprintf("[ %s ]", blurredStyle.Render("Reset"))
 )
 
 type RenderFunc func(m Model) string
@@ -53,6 +55,7 @@ const (
 
 const (
 	MAIN_ADD_BUTTON_INDEX         = 17
+	MAIN_RESET_BUTTON_INDEX       = 18
 	FIRST_TRANSACTION_TYPE_INDEX  = 8
 	URL_INDEX                     = 4
 	TRANSACTION_INDEX_FIELD_INDEX = 7
@@ -89,7 +92,11 @@ func New() Model {
 	}
 
 	m.Tabs = []string{"Main", "UCO Transfers", "Token Transfers", "Recipients", "Ownerships", "Content", "Smart Contract"}
+	m.resetInterface()
+	return m
+}
 
+func (m *Model) resetInterface() {
 	m.mainModel = NewMainModel()
 	m.ucoTransferModel = NewUcoTransferModel(&m.transaction)
 	m.tokenTransferModel = NewTokenTransferModel(&m.transaction)
@@ -97,8 +104,6 @@ func New() Model {
 	m.ownershipsModel = NewOwnershipsModel(m.secretKey, &m.transaction)
 	m.contentModel = NewContentModel()
 	m.smartContractModel = NewSmartContractModel()
-
-	return m
 }
 
 func numberValidator(s string) error {
@@ -140,6 +145,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.transaction.SetType(msg.TransactionType)
 	case SendTransaction:
 		sendTransaction(&m, msg.Curve, msg.Seed)
+	case ResetInterface:
+		m.resetInterface()
 	case AddUcoTransfer:
 		m.transaction.AddUcoTransfer(msg.To, msg.Amount)
 		m.ucoTransferModel.transaction = &m.transaction
@@ -204,11 +211,6 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				(m.activeTab != CONTENT_TAB && m.activeTab != SMART_CONTRACT_TAB) {
 				m.activeTab = createTransactionTab(min(int(m.activeTab)+1, len(m.Tabs)-1))
 				cmds = focusOnTab(&m)
-				if m.activeTab == SMART_CONTRACT_TAB {
-					m.smartContractModel.smartContractTextAreaInput.Focus()
-				} else if m.activeTab == CONTENT_TAB {
-					m.contentModel.contentTextAreaInput.Focus()
-				}
 			} else if m.activeTab == CONTENT_TAB {
 				w, cmds := m.contentModel.Update(msg)
 				m.contentModel = w.(ContentModel)

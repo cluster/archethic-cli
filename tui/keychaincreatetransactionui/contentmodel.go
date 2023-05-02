@@ -43,6 +43,9 @@ func (m ContentModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 		default:
 
+			if !m.contentTextAreaInput.Focused() {
+				m.contentTextAreaInput.Focus()
+			}
 			m.contentTextAreaInput, _ = m.contentTextAreaInput.Update(msg)
 			return m, func() tea.Msg {
 				return UpdateContent{Content: []byte(m.contentTextAreaInput.Value())}
@@ -50,32 +53,11 @@ func (m ContentModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 		}
 	}
-	m, cmds := updateContentFocus(m)
-	cmds = append(cmds, m.updateContentInputs(msg)...)
-
-	return m, tea.Batch(cmds...)
-}
-
-func (m *ContentModel) updateContentInputs(msg tea.Msg) []tea.Cmd {
-
-	cmds := make([]tea.Cmd, 1)
-	m.contentTextAreaInput, cmds[0] = m.contentTextAreaInput.Update(msg)
-
-	return cmds
-}
-
-func updateContentFocus(m ContentModel) (ContentModel, []tea.Cmd) {
-
-	cmds := make([]tea.Cmd, 1)
-	cmds[0] = m.contentTextAreaInput.Focus()
-
-	return m, cmds
+	return m, nil
 }
 
 func (m *ContentModel) SwitchTab() (ContentModel, []tea.Cmd) {
-	m.contentTextAreaInput.Focus()
-	m2, cmds := updateContentFocus(*m)
-	return m2, cmds
+	return *m, nil
 }
 
 func (m ContentModel) View() string {

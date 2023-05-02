@@ -71,6 +71,7 @@ type SendTransaction struct {
 	Curve archethic.Curve
 	Seed  string
 }
+type ResetInterface struct{}
 
 func NewMainModel() MainModel {
 
@@ -163,6 +164,10 @@ func (m MainModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				return m, func() tea.Msg {
 					return SendTransaction{Curve: getCurve(&m), Seed: m.mainInputs[1].Value()}
 				}
+			} else if m.focusInput == MAIN_RESET_BUTTON_INDEX {
+				return m, func() tea.Msg {
+					return ResetInterface{}
+				}
 			}
 
 		default:
@@ -195,16 +200,16 @@ func updateMainFocusInput(m *MainModel, keypress string) {
 	}
 
 	if m.serviceMode {
-		if m.focusInput > MAIN_ADD_BUTTON_INDEX {
+		if m.focusInput > MAIN_RESET_BUTTON_INDEX {
 			m.focusInput = FIRST_TRANSACTION_TYPE_INDEX
 		} else if m.focusInput < FIRST_TRANSACTION_TYPE_INDEX {
-			m.focusInput = MAIN_ADD_BUTTON_INDEX
+			m.focusInput = MAIN_RESET_BUTTON_INDEX
 		}
 	} else {
-		if m.focusInput > MAIN_ADD_BUTTON_INDEX {
+		if m.focusInput > MAIN_RESET_BUTTON_INDEX {
 			m.focusInput = 0
 		} else if m.focusInput < 0 {
-			m.focusInput = MAIN_ADD_BUTTON_INDEX
+			m.focusInput = MAIN_RESET_BUTTON_INDEX
 		}
 	}
 }
@@ -276,6 +281,13 @@ func (m MainModel) View() string {
 		button = &focusedButton
 	}
 	fmt.Fprintf(&b, "\n\n%s\n\n", *button)
+
+	// reset button
+	resetButton := &blurredResetButton
+	if m.focusInput == MAIN_RESET_BUTTON_INDEX {
+		resetButton = &focusedResetButton
+	}
+	fmt.Fprintf(&b, "%s\n\n", *resetButton)
 
 	return b.String()
 }
