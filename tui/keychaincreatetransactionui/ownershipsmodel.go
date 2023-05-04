@@ -2,6 +2,7 @@ package keychaincreatetransactionui
 
 import (
 	"encoding/hex"
+	"errors"
 	"fmt"
 	"strings"
 
@@ -18,6 +19,7 @@ type OwnershipsModel struct {
 	storageNouncePublicKey string
 	secretKey              []byte
 	transaction            *archethic.TransactionBuilder
+	feedback               string
 }
 
 type AddOwnership struct {
@@ -75,12 +77,25 @@ func (m OwnershipsModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 			// add authorized key
 			case len(m.ownershipsInputs) + len(m.authorizedKeys):
-				addAuthorizedKey(&m)
+				err := addAuthorizedKey(&m)
+				if err != nil {
+					m.feedback = fmt.Sprintf("%s", err)
+					return m, nil
+				}
 				// load storage nounce public key
 			case len(m.ownershipsInputs) + len(m.authorizedKeys) + 1:
+				if m.url == "" {
+					m.feedback = "Please select a node endpoint in the main tab"
+					return m, nil
+				}
 				if m.storageNouncePublicKey == "" {
 					client := archethic.NewAPIClient(m.url)
-					m.storageNouncePublicKey = client.GetStorageNoncePublicKey()
+					var err error
+					m.storageNouncePublicKey, err = client.GetStorageNoncePublicKey()
+					if err != nil {
+						m.feedback = fmt.Sprintf("%s", err)
+						return m, nil
+					}
 				}
 				m.ownershipsInputs[1].SetValue(m.storageNouncePublicKey)
 				return m, func() tea.Msg {
@@ -89,22 +104,40 @@ func (m OwnershipsModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				//add ownership
 			case len(m.ownershipsInputs) + len(m.authorizedKeys) + 2:
 
-				secret := archethic.MaybeConvertToHex(m.ownershipsInputs[0].Value())
-
-				if m.ownershipsInputs[1].Value() != "" {
-					addAuthorizedKey(&m)
+				secret, err := archethic.MaybeConvertToHex(m.ownershipsInputs[0].Value())
+				if err != nil {
+					m.feedback = fmt.Sprintf("%s", err)
+					return m, nil
 				}
 
-				cipher := archethic.AesEncrypt([]byte(secret), m.secretKey)
+				if m.ownershipsInputs[1].Value() != "" {
+					err := addAuthorizedKey(&m)
+					if err != nil {
+						m.feedback = fmt.Sprintf("%s", err)
+						return m, nil
+					}
+				}
+
+				cipher, err := archethic.AesEncrypt([]byte(secret), m.secretKey)
+				if err != nil {
+					m.feedback = fmt.Sprintf("%s", err)
+					return m, nil
+				}
 				authorizedKeys := make([]archethic.AuthorizedKey, len(m.authorizedKeys))
 				for i, key := range m.authorizedKeys {
 					keyByte, err := hex.DecodeString(key)
 					if err != nil {
-						panic(err)
+						m.feedback = fmt.Sprintf("%s", err)
+						return m, nil
+					}
+					encrypedSecretKey, err := archethic.EcEncrypt(m.secretKey, keyByte)
+					if err != nil {
+						m.feedback = fmt.Sprintf("%s", err)
+						return m, nil
 					}
 					authorizedKeys[i] = archethic.AuthorizedKey{
 						PublicKey:          keyByte,
-						EncryptedSecretKey: archethic.EcEncrypt(m.secretKey, keyByte),
+						EncryptedSecretKey: encrypedSecretKey,
 					}
 				}
 
@@ -141,10 +174,15 @@ func (m OwnershipsModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	return m, tea.Batch(cmds...)
 }
 
-func addAuthorizedKey(m *OwnershipsModel) {
+func addAuthorizedKey(m *OwnershipsModel) error {
 	authorizedKey := m.ownershipsInputs[1].Value()
+	_, err := hex.DecodeString(authorizedKey)
+	if err != nil {
+		return errors.New("invalid authorization key")
+	}
 	m.authorizedKeys = append(m.authorizedKeys, authorizedKey)
 	m.ownershipsInputs[1].SetValue("")
+	return nil
 }
 
 func (m *OwnershipsModel) updateOwnershipsInputs(msg tea.Msg) []tea.Cmd {
@@ -203,7 +241,8 @@ func (m OwnershipsModel) View() string {
 			b.WriteRune('\n')
 		}
 	}
-
+	b.WriteRune('\n')
+	b.WriteString(m.feedback)
 	if len(m.authorizedKeys) > 0 {
 		b.WriteString("\nList of authorized keys to add:\n")
 		for i := range m.authorizedKeys {
