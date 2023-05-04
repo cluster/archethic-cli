@@ -144,7 +144,10 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case UpdateTransactionType:
 		m.transaction.SetType(msg.TransactionType)
 	case SendTransaction:
-		sendTransaction(&m, msg.Curve, msg.Seed)
+		err := sendTransaction(&m, msg.Curve, msg.Seed)
+		if err != nil {
+			m.feedback = err.Error()
+		}
 	case ResetInterface:
 		m.resetInterface()
 	case AddUcoTransfer:
@@ -201,7 +204,6 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					return BackMsg(true)
 				}
 			}
-
 		case "ctrl+c":
 			return m, tea.Quit
 		case "right", "tab":
@@ -344,44 +346,28 @@ func (m Model) View() string {
 	doc.WriteString("\n")
 
 	tabContent := ""
+	var b strings.Builder
+
 	switch m.activeTab {
 	case MAIN_TAB:
-		var b strings.Builder
 		b.WriteString(m.mainModel.View())
 		b.WriteString("\n\n")
 		b.WriteString(m.feedback)
-		tabContent = b.String()
 	case UCO_TAB:
-		var b strings.Builder
 		b.WriteString(m.ucoTransferModel.View())
-		b.WriteString("\n\n")
-		tabContent = b.String()
 	case TOKEN_TAB:
-		var b strings.Builder
 		b.WriteString(m.tokenTransferModel.View())
-		b.WriteString("\n\n")
-		tabContent = b.String()
 	case RECIPIENTS_TAB:
-		var b strings.Builder
 		b.WriteString(m.recipientsModel.View())
-		b.WriteString("\n\n")
-		tabContent = b.String()
 	case OWNERSHIPS_TAB:
-		var b strings.Builder
 		b.WriteString(m.ownershipsModel.View())
-		b.WriteString("\n\n")
-		tabContent = b.String()
 	case CONTENT_TAB:
-		var b strings.Builder
 		b.WriteString(m.contentModel.View())
-		b.WriteString("\n\n")
-		tabContent = b.String()
 	case SMART_CONTRACT_TAB:
-		var b strings.Builder
 		b.WriteString(m.smartContractModel.View())
-		b.WriteString("\n\n")
-		tabContent = b.String()
 	}
+	b.WriteString("\n\n")
+	tabContent = b.String()
 	doc.WriteString(windowStyle.Width((lipgloss.Width(row) - windowStyle.GetHorizontalFrameSize())).Render(tabContent))
 	return docStyle.Render(doc.String())
 }
@@ -400,22 +386,29 @@ func min(a, b int) int {
 	return b
 }
 
-func sendTransaction(m *Model, curve archethic.Curve, seedStr string) {
+func sendTransaction(m *Model, curve archethic.Curve, seedStr string) error {
 	m.feedback = ""
+	seed, err := archethic.MaybeConvertToHex(seedStr)
+	if err != nil {
+		return err
+	}
 	if len(m.transaction.Data.Code) > 0 {
-
 		ownershipIndex := -1
 		for i, ownership := range m.transaction.Data.Ownerships {
-			decodedSecret := string(archethic.AesDecrypt(ownership.Secret, m.secretKey))
+			decryptSecret, err := archethic.AesDecrypt(ownership.Secret, m.secretKey)
+			if err != nil {
+				return err
+			}
+			decodedSecret := string(decryptSecret)
 
-			if reflect.DeepEqual(decodedSecret, string(archethic.MaybeConvertToHex(seedStr))) {
+			if reflect.DeepEqual(decodedSecret, string(seed)) {
 				ownershipIndex = i
 				break
 			}
 		}
 
 		if ownershipIndex == -1 {
-			m.feedback = "You need to create an ownership with the transaction seed as secret and authorize node public key to let nodes generate new transaction from your smart contract"
+			return errors.New("you need to create an ownership with the transaction seed as secret and authorize node public key to let nodes generate new transaction from your smart contract")
 		} else {
 			authorizedKeyIndex := -1
 			for i, authKey := range m.transaction.Data.Ownerships[ownershipIndex].AuthorizedKeys {
@@ -426,46 +419,56 @@ func sendTransaction(m *Model, curve archethic.Curve, seedStr string) {
 			}
 
 			if authorizedKeyIndex == -1 {
-				m.feedback = "You need to create an ownership with the transaction seed as secret and authorize node public key to let nodes generate new transaction from your smart contract"
+				return errors.New("you need to create an ownership with the transaction seed as secret and authorize node public key to let nodes generate new transaction from your smart contract")
 			}
 		}
 	}
 
-	if m.feedback == "" {
-		client := archethic.NewAPIClient(m.url)
+	client := archethic.NewAPIClient(m.url)
 
-		seed := archethic.MaybeConvertToHex(seedStr)
-
-		if m.serviceMode {
-			buildKeychainTransaction(seed, client, m)
-		} else {
-			m.transaction.Build(seed, uint32(m.transactionIndex), curve, archethic.SHA256)
-
+	if m.serviceMode {
+		err = buildKeychainTransaction(seed, client, m)
+		if err != nil {
+			return err
 		}
-		originPrivateKey, _ := hex.DecodeString("01019280BDB84B8F8AEDBA205FE3552689964A5626EE2C60AA10E3BF22A91A036009")
-		m.transaction.OriginSign(originPrivateKey)
+	} else {
+		m.transaction.Build(seed, uint32(m.transactionIndex), curve, archethic.SHA256)
 
-		ts := archethic.NewTransactionSender(client)
-		ts.AddOnSent(func() {
-			m.feedback = "Transaction sent: " + m.url + "/explorer/transaction/" + strings.ToUpper(hex.EncodeToString(m.transaction.Address))
-		})
-
-		ts.AddOnError(func(sender, message string) {
-			m.feedback = "Transaction error: " + message
-		})
-
-		ts.SendTransaction(&m.transaction, 100, 60)
 	}
+	originPrivateKey, _ := hex.DecodeString("01019280BDB84B8F8AEDBA205FE3552689964A5626EE2C60AA10E3BF22A91A036009")
+	m.transaction.OriginSign(originPrivateKey)
+
+	ts := archethic.NewTransactionSender(client)
+	ts.AddOnSent(func() {
+		m.feedback = "Transaction sent: " + m.url + "/explorer/transaction/" + strings.ToUpper(hex.EncodeToString(m.transaction.Address))
+	})
+
+	ts.AddOnError(func(sender, message string) {
+		m.feedback = "Transaction error: " + message
+	})
+
+	ts.SendTransaction(&m.transaction, 100, 60)
+	return nil
 }
 
-func buildKeychainTransaction(seed []byte, client *archethic.APIClient, m *Model) {
-	keychain := archethic.GetKeychain(seed, *client)
+func buildKeychainTransaction(seed []byte, client *archethic.APIClient, m *Model) error {
+	keychain, err := archethic.GetKeychain(seed, *client)
+	if err != nil {
+		return err
+	}
 
 	m.transaction.Version = uint32(keychain.Version)
 
-	genesisAddress := keychain.DeriveAddress(m.serviceName, 0)
+	genesisAddress, err := keychain.DeriveAddress(m.serviceName, 0)
+	if err != nil {
+		return err
+	}
 
 	index := client.GetLastTransactionIndex(hex.EncodeToString(genesisAddress))
 
-	m.transaction = keychain.BuildTransaction(m.transaction, m.serviceName, uint8(index))
+	m.transaction, err = keychain.BuildTransaction(m.transaction, m.serviceName, uint8(index))
+	if err != nil {
+		return err
+	}
+	return nil
 }

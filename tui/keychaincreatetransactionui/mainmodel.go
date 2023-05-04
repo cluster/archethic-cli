@@ -50,6 +50,7 @@ type MainModel struct {
 	serviceName             string
 	selectedTransactionType string
 	focusInput              int
+	feedback                string
 }
 
 type UpdateTransactionIndex struct {
@@ -129,8 +130,16 @@ func (m MainModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			// if the seed or the curve are blured, they are probably updated, so update the transaction index
 			if m.focusInput == URL_INDEX || m.focusInput == TRANSACTION_INDEX_FIELD_INDEX {
 				client := archethic.NewAPIClient(m.mainInputs[0].Value())
-				seed := archethic.MaybeConvertToHex(m.mainInputs[1].Value())
-				address := archethic.DeriveAddress(seed, 0, getCurve(&m), archethic.SHA256)
+				seed, err := archethic.MaybeConvertToHex(m.mainInputs[1].Value())
+				if err != nil {
+					m.feedback = err.Error()
+					return m, nil
+				}
+				address, err := archethic.DeriveAddress(seed, 0, getCurve(&m), archethic.SHA256)
+				if err != nil {
+					m.feedback = err.Error()
+					return m, nil
+				}
 				addressHex := hex.EncodeToString(address)
 				index := client.GetLastTransactionIndex(addressHex)
 				m.mainInputs[3].SetValue(fmt.Sprint(index))
@@ -280,6 +289,11 @@ func (m MainModel) View() string {
 	if m.focusInput == MAIN_ADD_BUTTON_INDEX {
 		button = &focusedButton
 	}
+
+	if m.feedback != "" {
+		b.WriteString(m.feedback + "\n\n")
+	}
+
 	fmt.Fprintf(&b, "\n\n%s\n\n", *button)
 
 	// reset button

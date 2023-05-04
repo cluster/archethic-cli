@@ -15,6 +15,7 @@ type TokenTransferModel struct {
 	tokenInputs []textinput.Model
 	focusInput  int
 	transaction *archethic.TransactionBuilder
+	feedback    string
 }
 
 type AddTokenTransfer struct {
@@ -42,10 +43,12 @@ func NewTokenTransferModel(transaction *archethic.TransactionBuilder) TokenTrans
 			t.Prompt = "> To:\n"
 		case 1:
 			t.Prompt = "> Amount:\n"
+			t.Validate = numberValidator
 		case 2:
 			t.Prompt = "> Token Address:\n"
 		case 3:
 			t.Prompt = "> Token ID:\n"
+			t.Validate = numberValidator
 		}
 
 		m.tokenInputs[i] = t
@@ -69,23 +72,27 @@ func (m TokenTransferModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				toHex := m.tokenInputs[0].Value()
 				to, err := hex.DecodeString(toHex)
 				if err != nil {
-					panic(err)
+					m.feedback = "Invalid address"
+					return m, nil
 				}
 				amountStr := m.tokenInputs[1].Value()
 				amount, err := strconv.ParseUint(amountStr, 10, 64)
 				if err != nil {
-					panic(err)
+					m.feedback = "Invalid amount"
+					return m, nil
 				}
 				tokenAddressHex := m.tokenInputs[2].Value()
 				tokenAddress, err := hex.DecodeString(tokenAddressHex)
 				if err != nil {
-					panic(err)
+					m.feedback = "Invalid token address"
+					return m, nil
 				}
 				tokenIdStr := m.tokenInputs[3].Value()
 
 				tokenId, err := strconv.Atoi(tokenIdStr)
 				if err != nil {
-					panic(err)
+					m.feedback = "Invalid TokenID"
+					return m, nil
 				}
 
 				m.tokenInputs[0].SetValue("")
@@ -169,6 +176,8 @@ func (m TokenTransferModel) View() string {
 			b.WriteRune('\n')
 		}
 	}
+	b.WriteRune('\n')
+	b.WriteString(m.feedback)
 	button := &blurredButton
 	if m.focusInput == len(m.tokenInputs) {
 		button = &focusedButton

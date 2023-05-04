@@ -14,6 +14,7 @@ type RecipientsModel struct {
 	focusInput      int
 	recipientsInput textinput.Model
 	transaction     *archethic.TransactionBuilder
+	feedback        string
 }
 type AddRecipient struct {
 	Recipient []byte
@@ -50,7 +51,8 @@ func (m RecipientsModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				recipientHex := m.recipientsInput.Value()
 				recipient, err := hex.DecodeString(recipientHex)
 				if err != nil {
-					panic(err)
+					m.feedback = "Invalid recipient address"
+					return m, nil
 				}
 				m.recipientsInput.SetValue("")
 				m, cmds := updateRecipientsFocus(m)
@@ -125,7 +127,8 @@ func (m RecipientsModel) View() string {
 	var b strings.Builder
 	b.WriteString(m.recipientsInput.View())
 	b.WriteRune('\n')
-
+	b.WriteString(m.feedback)
+	b.WriteRune('\n')
 	button := &blurredButton
 	if m.focusInput == 1 {
 		button = &focusedButton

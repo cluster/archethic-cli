@@ -33,6 +33,7 @@ type Model struct {
 	focusIndex       int
 	inputs           []textinput.Model
 	generatedAddress string
+	feedback         string
 }
 
 func New() Model {
@@ -80,7 +81,7 @@ func (m Model) Init() tea.Cmd {
 func curveValidator(s string) error {
 	val, err := strconv.ParseInt(s, 10, 32)
 	if err == nil && (val < 0 || val > 2) {
-		return errors.New("Number should be >0 and <=2")
+		return errors.New("number should be >0 and <=2")
 	}
 	return err
 }
@@ -88,7 +89,7 @@ func curveValidator(s string) error {
 func hashAlgoValidator(s string) error {
 	val, err := strconv.ParseInt(s, 10, 32)
 	if err == nil && (val < 0 || val > 4) {
-		return errors.New("Number should be >0 and <=4")
+		return errors.New("number should be >0 and <=4")
 	}
 	return err
 }
@@ -117,7 +118,11 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			// Did the user press enter while the submit button was focused?
 			// If so, exit.
 			if s == "enter" && m.focusIndex == len(m.inputs) {
-				seed := archethic.MaybeConvertToHex(m.inputs[0].Value())
+				seed, err := archethic.MaybeConvertToHex(m.inputs[0].Value())
+				if err != nil {
+					m.feedback = err.Error()
+					return m, nil
+				}
 				index, err := strconv.ParseUint(m.inputs[1].Value(), 10, 32)
 
 				// check for errors
@@ -136,8 +141,12 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				curve := archethic.Curve(uint8(curveInt))
 				hashAlgo := archethic.HashAlgo(uint8(hashAlgoInt))
 
-				address := archethic.DeriveAddress(seed, uint32(index), curve, hashAlgo)
-				m.generatedAddress = hex.EncodeToString(address)
+				address, err := archethic.DeriveAddress(seed, uint32(index), curve, hashAlgo)
+				if err != nil {
+					m.feedback = err.Error()
+				} else {
+					m.generatedAddress = hex.EncodeToString(address)
+				}
 			}
 
 			// Cycle indexes
@@ -215,6 +224,10 @@ func (m Model) View() string {
 		button = &focusedButton
 	}
 	fmt.Fprintf(&b, "\n\n%s\n\n", *button)
+
+	if m.feedback != "" {
+		b.WriteString(m.feedback + "\n\n")
+	}
 
 	if m.generatedAddress != "" {
 		b.WriteString("The generated address is: " + m.generatedAddress)

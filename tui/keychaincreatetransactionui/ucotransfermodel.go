@@ -15,6 +15,7 @@ type UcoTransferModel struct {
 	ucoInputs   []textinput.Model
 	focusInput  int
 	transaction *archethic.TransactionBuilder
+	feedback    string
 }
 
 type AddUcoTransfer struct {
@@ -40,6 +41,7 @@ func NewUcoTransferModel(transaction *archethic.TransactionBuilder) UcoTransferM
 			t.Prompt = "> To:\n"
 		case 1:
 			t.Prompt = "> Amount:\n"
+			t.Validate = numberValidator
 		}
 
 		m.ucoInputs[i] = t
@@ -67,12 +69,14 @@ func (m UcoTransferModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				toHex := m.ucoInputs[0].Value()
 				to, err := hex.DecodeString(toHex)
 				if err != nil {
-					panic(err)
+					m.feedback = "Invalid address"
+					return m, nil
 				}
 				amountStr := m.ucoInputs[1].Value()
 				amount, err := strconv.ParseUint(amountStr, 10, 64)
 				if err != nil {
-					panic(err)
+					m.feedback = "Invalid amount"
+					return m, nil
 				}
 				m.ucoInputs[0].SetValue("")
 				m.ucoInputs[1].SetValue("")
@@ -166,6 +170,8 @@ func (m UcoTransferModel) View() string {
 			b.WriteRune('\n')
 		}
 	}
+	b.WriteRune('\n')
+	b.WriteString(m.feedback)
 	button := &blurredButton
 	if m.focusInput == len(m.ucoInputs) {
 		button = &focusedButton
