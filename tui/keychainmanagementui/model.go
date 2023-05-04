@@ -221,7 +221,6 @@ func createKeychain(m *Model) {
 
 		m.keychainSeed = hex.EncodeToString(randomSeed)
 		m.keychainTransactionAddress = fmt.Sprintf("%s/explorer/transaction/%x", url, keychainAddress)
-		ts.Unsubscribe("confirmation")
 
 		accessTx := archethic.NewAccessTransaction(accessSeed, keychainAddress)
 		accessTx.OriginSign(originPrivateKey)
@@ -232,10 +231,11 @@ func createKeychain(m *Model) {
 			m.keychainAccessTransactionAddress = fmt.Sprintf("%s/explorer/transaction/%x", url, accessAddress)
 		})
 		ts2.AddOnError(func(senderContext, message string) {
-			m.feedback += fmt.Sprintf("Access transaction error: %s", message)
+			m.feedback += fmt.Sprintf("\nAccess transaction error: %s", message)
 			ts.Unsubscribe("error")
 		})
 		ts2.SendTransaction(&accessTx, 100, 60)
+		ts.Unsubscribe("confirmation")
 	})
 	ts.AddOnError(func(senderContext, message string) {
 		m.feedback += fmt.Sprintf("Keychain transaction error: %s", message)
