@@ -293,7 +293,7 @@ func createKeychain(m *Model) error {
 			m.feedback += fmt.Sprintf("\nAccess transaction error: %s", message)
 			ts.Unsubscribe("error")
 		})
-		ts2.SendTransaction(&accessTx, 100, 60)
+		ts2.SendTransaction(accessTx, 100, 60)
 		ts.Unsubscribe("confirmation")
 	})
 	ts.AddOnError(func(senderContext, message string) {
@@ -301,7 +301,7 @@ func createKeychain(m *Model) error {
 		m.feedback += fmt.Sprintf("Keychain transaction error: %s", message)
 		ts.Unsubscribe("error")
 	})
-	ts.SendTransaction(&keychainTx, 100, 60)
+	ts.SendTransaction(keychainTx, 100, 60)
 	return nil
 }
 
