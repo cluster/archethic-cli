@@ -269,6 +269,11 @@ func createKeychain(m *Model) error {
 	keychainTx.OriginSign(originPrivateKey)
 
 	client := archethic.NewAPIClient(url)
+	accessKeychain, _ := archethic.GetKeychain(accessSeed, *client)
+	if accessKeychain != nil {
+		return errors.New("keychain access already exists")
+	}
+
 	ts := archethic.NewTransactionSender(client)
 	ts.AddOnRequiredConfirmation(func(nbConf int) {
 		m.feedback += "\nKeychain's transaction confirmed."
