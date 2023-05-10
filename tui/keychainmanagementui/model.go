@@ -16,6 +16,7 @@ import (
 
 // BackMsg change state back to project view
 type BackMsg bool
+type SendNewKeychainTransaction struct{}
 
 var (
 	focusedStyle        = lipgloss.NewStyle().Foreground(lipgloss.Color("205"))
@@ -52,6 +53,7 @@ type Model struct {
 	keychainTransactionAddress       string
 	keychainAccessTransactionAddress string
 	feedback                         string
+	showLoading                      bool
 }
 
 func New() Model {
@@ -86,6 +88,9 @@ func (m Model) Init() tea.Cmd {
 func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	urlBlockSize := len(urlType)
 	switch msg := msg.(type) {
+	case SendNewKeychainTransaction:
+		createKeychain(&m)
+		return m, nil
 	case tea.KeyMsg:
 		switch msg.String() {
 		case "ctrl+c":
@@ -106,7 +111,10 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 			// create keychain button
 			if m.focusIndex == len(m.inputs)+urlBlockSize {
-				createKeychain(&m)
+				m.showLoading = true
+				return m, func() tea.Msg {
+					return SendNewKeychainTransaction{}
+				}
 			}
 
 			// access keychain button
@@ -226,11 +234,13 @@ func createKeychain(m *Model) {
 		accessTx.OriginSign(originPrivateKey)
 		ts2 := archethic.NewTransactionSender(client)
 		ts2.AddOnConfirmation(func(nbConf int, maxConf int) {
+			m.showLoading = false
 			m.feedback += "\nKeychain access transaction confirmed."
 			ts2.Unsubscribe("confirmation")
 			m.keychainAccessTransactionAddress = fmt.Sprintf("%s/explorer/transaction/%x", url, accessAddress)
 		})
 		ts2.AddOnError(func(senderContext, message string) {
+			m.showLoading = false
 			m.feedback += fmt.Sprintf("\nAccess transaction error: %s", message)
 			ts.Unsubscribe("error")
 		})
@@ -238,6 +248,7 @@ func createKeychain(m *Model) {
 		ts.Unsubscribe("confirmation")
 	})
 	ts.AddOnError(func(senderContext, message string) {
+		m.showLoading = false
 		m.feedback += fmt.Sprintf("Keychain transaction error: %s", message)
 		ts.Unsubscribe("error")
 	})
@@ -258,6 +269,12 @@ func (m Model) View() string {
 	if m.focusIndex == len(m.inputs)+len(urlType) {
 		createButton = &createFocusedButton
 	}
+	if m.showLoading {
+		b.WriteString("\n\n")
+		b.WriteString("Loading...")
+		b.WriteString("\n\n")
+	}
+
 	fmt.Fprintf(&b, "\n\n%s", *createButton)
 
 	fmt.Fprintf(&b, "%s\n", m.feedback)
