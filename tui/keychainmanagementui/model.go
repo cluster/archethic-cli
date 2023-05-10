@@ -92,6 +92,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case SendNewKeychainTransaction:
 		err := createKeychain(&m)
 		if err != nil {
+			m.showLoading = false
 			m.feedback = err.Error()
 		}
 		return m, nil
@@ -115,13 +116,13 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 			// create keychain button
 			if m.focusIndex == len(m.inputs)+urlBlockSize {
-				m.showLoading = true
 				m.feedback = ""
 				err := validateInput(m)
 				if err != nil {
 					m.feedback = err.Error()
 					return m, nil
 				}
+				m.showLoading = true
 				return m, func() tea.Msg {
 					return SendNewKeychainTransaction{}
 				}
