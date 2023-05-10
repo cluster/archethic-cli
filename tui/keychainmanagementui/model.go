@@ -116,6 +116,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			// create keychain button
 			if m.focusIndex == len(m.inputs)+urlBlockSize {
 				m.showLoading = true
+				m.feedback = ""
 				err := validateInput(m)
 				if err != nil {
 					m.feedback = err.Error()
@@ -129,6 +130,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			// access keychain button
 			if m.focusIndex == len(m.inputs)+5 {
 				err := validateInput(m)
+				m.feedback = ""
 				if err != nil {
 					m.feedback = err.Error()
 					return m, nil
@@ -320,20 +322,23 @@ func (m Model) View() string {
 		b.WriteString(m.inputs[i].View())
 	}
 
-	createButton := &createBlurredButton
-	if m.focusIndex == len(m.inputs)+len(urlType) {
-		createButton = &createFocusedButton
-	}
 	if m.showLoading {
 		b.WriteString("\n\n")
 		b.WriteString("Loading...")
 		b.WriteString("\n\n")
 	}
 
-	fmt.Fprintf(&b, "\n\n%s", *createButton)
+	createButton := &createBlurredButton
+	if m.focusIndex == len(m.inputs)+len(urlType) {
+		createButton = &createFocusedButton
+	}
 
-	fmt.Fprintf(&b, "%s\n", m.feedback)
-	b.WriteRune('\n')
+	if m.feedback != "" {
+		b.WriteString("\n\n")
+		b.WriteString(m.feedback)
+		b.WriteString("\n\n")
+	}
+
 	fmt.Fprintf(&b, "\n\n%s", *createButton)
 	b.WriteRune('\n')
 	if m.keychainSeed != "" {
