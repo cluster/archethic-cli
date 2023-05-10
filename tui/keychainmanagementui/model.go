@@ -224,7 +224,7 @@ func createKeychain(m *Model) {
 
 	client := archethic.NewAPIClient(url)
 	ts := archethic.NewTransactionSender(client)
-	ts.AddOnConfirmation(func(nbConf int, maxConf int) {
+	ts.AddOnRequiredConfirmation(func(nbConf int) {
 		m.feedback += "\nKeychain's transaction confirmed."
 
 		m.keychainSeed = hex.EncodeToString(randomSeed)
@@ -233,7 +233,7 @@ func createKeychain(m *Model) {
 		accessTx := archethic.NewAccessTransaction(accessSeed, keychainAddress)
 		accessTx.OriginSign(originPrivateKey)
 		ts2 := archethic.NewTransactionSender(client)
-		ts2.AddOnConfirmation(func(nbConf int, maxConf int) {
+		ts2.AddOnRequiredConfirmation(func(nbConf int) {
 			m.showLoading = false
 			m.feedback += "\nKeychain access transaction confirmed."
 			ts2.Unsubscribe("confirmation")
