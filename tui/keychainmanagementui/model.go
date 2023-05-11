@@ -36,8 +36,10 @@ var (
 	createFocusedButton = focusedStyle.Copy().Render("[ Create Keychain ]")
 	createBlurredButton = fmt.Sprintf("[ %s ]", blurredStyle.Render("Create Keychain"))
 
-	createTransactionFocusedButton       = focusedStyle.Copy().Render("[ Create Transaction ]")
-	createTransactionaccessBlurredButton = fmt.Sprintf("[ %s ]", blurredStyle.Render("Create Transaction"))
+	createTransactionFocusedButton       = focusedStyle.Copy().Render("[ Create Transaction for Service ]")
+	createTransactionaccessBlurredButton = fmt.Sprintf("[ %s ]", blurredStyle.Render("Create Transaction for Service"))
+	createServiceFocusedButton           = focusedStyle.Copy().Render("[ Create Service ]")
+	createServiceBlurredButton           = fmt.Sprintf("[ %s ]", blurredStyle.Render("Create Service"))
 	urlType                              = []string{"Local", "Testnet", "Mainnet", "Custom"}
 	urls                                 = map[string]string{
 		"Local":   "http://localhost:4000",
@@ -49,6 +51,7 @@ var (
 type Model struct {
 	focusIndex                       int
 	inputs                           []textinput.Model
+	newServiceInputs                 []textinput.Model
 	keychain                         *archethic.Keychain
 	serviceNames                     []string
 	selectedUrl                      string
@@ -66,8 +69,9 @@ func New() Model {
 	s.Spinner = spinner.Dot
 	s.Style = lipgloss.NewStyle().Foreground(lipgloss.Color("205"))
 	m := Model{
-		inputs:  make([]textinput.Model, 2),
-		spinner: s,
+		inputs:           make([]textinput.Model, 2),
+		spinner:          s,
+		newServiceInputs: make([]textinput.Model, 2),
 	}
 
 	var t textinput.Model
@@ -85,6 +89,20 @@ func New() Model {
 		}
 
 		m.inputs[i] = t
+	}
+
+	for i := range m.newServiceInputs {
+		t = textinput.New()
+		t.CursorStyle = cursorStyle
+
+		switch i {
+		case 0:
+			t.Prompt = "> Service name\n"
+		case 1:
+			t.Prompt = "> Derivation path\n"
+		}
+
+		m.newServiceInputs[i] = t
 	}
 
 	return m
@@ -112,6 +130,15 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, func() tea.Msg {
 				return BackMsg(true)
 			}
+
+		case "d":
+			// select service
+			if m.focusIndex > len(m.inputs)+urlBlockSize+1 && m.focusIndex < len(m.inputs)+urlBlockSize+2+len(m.serviceNames) {
+				selectedService := m.focusIndex - len(m.inputs) - urlBlockSize - 2
+				removeServiceFromKeychain(&m, []byte(m.inputs[1].Value()), *archethic.NewAPIClient(m.inputs[0].Value()), m.serviceNames[selectedService])
+				return accessKeychain(m)
+			}
+			return m, nil
 
 		case "enter":
 			if m.focusIndex < urlBlockSize {
@@ -142,29 +169,15 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 			// access keychain button
 			if m.focusIndex == len(m.inputs)+5 {
-				err := validateInput(m)
-				m.feedback = ""
-				if err != nil {
-					m.feedback = err.Error()
-					return m, nil
-				}
-				url := m.inputs[0].Value()
-				seed, err := archethic.MaybeConvertToHex(m.inputs[1].Value())
-				if err != nil {
-					m.feedback = err.Error()
-					return m, nil
-				}
-				client := archethic.NewAPIClient(url)
-				m.keychain, err = archethic.GetKeychain(seed, *client)
-				if err != nil {
-					m.feedback = err.Error()
-					return m, nil
-				}
-				m.serviceNames = make([]string, 0, len(m.keychain.Services))
-				for k := range m.keychain.Services {
-					m.serviceNames = append(m.serviceNames, k)
-				}
-				sort.Strings(m.serviceNames)
+				return accessKeychain(m)
+			}
+
+			// add service
+			if m.focusIndex == len(m.inputs)+6+len(m.serviceNames)+1+len(m.newServiceInputs) {
+				addServiceToKeychain(&m, []byte(m.inputs[1].Value()), *archethic.NewAPIClient(m.inputs[0].Value()), m.newServiceInputs[0].Value(), m.newServiceInputs[1].Value())
+				m.newServiceInputs[0].SetValue("")
+				m.newServiceInputs[1].SetValue("")
+				return accessKeychain(m)
 			}
 
 			// select service
@@ -199,10 +212,15 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			if serviceSize > 0 {
 				serviceSize++
 			}
-			if m.focusIndex > len(m.inputs)+urlBlockSize+1+serviceSize {
+			newServiceFormSize := 0
+			// if there is a keychain, there is a form to add a new service (and a button)
+			if m.keychain != nil {
+				newServiceFormSize = len(m.newServiceInputs) + 1
+			}
+			if m.focusIndex > len(m.inputs)+urlBlockSize+2+serviceSize+newServiceFormSize {
 				m.focusIndex = 0
 			} else if m.focusIndex < 0 {
-				m.focusIndex = len(m.inputs) + urlBlockSize + 1 + serviceSize
+				m.focusIndex = len(m.inputs) + urlBlockSize + 2 + serviceSize + newServiceFormSize
 			}
 		}
 	default:
@@ -219,6 +237,34 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	return m, tea.Batch(cmds...)
 }
 
+func accessKeychain(m Model) (Model, tea.Cmd) {
+	err := validateInput(m)
+	m.feedback = ""
+	if err != nil {
+		m.feedback = err.Error()
+		return m, nil
+	}
+	url := m.inputs[0].Value()
+	seed, err := archethic.MaybeConvertToHex(m.inputs[1].Value())
+	if err != nil {
+		m.feedback = err.Error()
+		return m, nil
+	}
+	client := archethic.NewAPIClient(url)
+	m.keychain, err = archethic.GetKeychain(seed, *client)
+	if err != nil {
+		m.feedback = err.Error()
+		return m, nil
+	}
+	m.serviceNames = make([]string, 0, len(m.keychain.Services))
+	for k := range m.keychain.Services {
+		m.serviceNames = append(m.serviceNames, k)
+	}
+	sort.Strings(m.serviceNames)
+	m.selectedService = 0
+	return m, nil
+}
+
 func validateInput(m Model) error {
 	if m.inputs[0].Value() == "" {
 		return errors.New("please select a node endpoint")
@@ -228,18 +274,23 @@ func validateInput(m Model) error {
 	}
 	return nil
 }
+
 func (m *Model) updateInputs(msg tea.Msg) []tea.Cmd {
-	cmds := make([]tea.Cmd, len(m.inputs))
+	cmds := make([]tea.Cmd, len(m.inputs)+len(m.newServiceInputs))
 
 	for i := range m.inputs {
 		m.inputs[i], cmds[i] = m.inputs[i].Update(msg)
 	}
 
+	for i := range m.newServiceInputs {
+		m.newServiceInputs[i], cmds[i+len(m.inputs)] = m.newServiceInputs[i].Update(msg)
+	}
 	return cmds
 }
 
 func (m *Model) updateFocus(urlBlockSize int) []tea.Cmd {
-	cmds := make([]tea.Cmd, len(m.inputs))
+
+	cmds := make([]tea.Cmd, len(m.inputs)+len(m.newServiceInputs))
 	for i := 0; i <= len(m.inputs)-1; i++ {
 		if i == m.focusIndex-urlBlockSize {
 			// Set focused state
@@ -250,6 +301,19 @@ func (m *Model) updateFocus(urlBlockSize int) []tea.Cmd {
 		m.inputs[i].Blur()
 		m.inputs[i].PromptStyle = noStyle
 		m.inputs[i].TextStyle = noStyle
+	}
+
+	for i := 0; i < len(m.newServiceInputs); i++ {
+		index := len(m.inputs) + i
+		if i == m.focusIndex-len(m.inputs)-urlBlockSize-3-len(m.serviceNames) {
+			// Set focused state
+			cmds[index] = m.newServiceInputs[i].Focus()
+			continue
+		}
+		// Remove focused state
+		m.newServiceInputs[i].Blur()
+		m.newServiceInputs[i].PromptStyle = noStyle
+		m.newServiceInputs[i].TextStyle = noStyle
 	}
 
 	return cmds
@@ -281,6 +345,7 @@ func createKeychain(m *Model) error {
 	}
 
 	keychainTx, err := archethic.NewKeychainTransaction(randomSeed, [][]byte{publicKey})
+
 	if err != nil {
 		return err
 	}
@@ -328,6 +393,54 @@ func createKeychain(m *Model) error {
 	return nil
 }
 
+func addServiceToKeychain(m *Model, accessSeed []byte, client archethic.APIClient, serviceName string, serviceDerivationPath string) {
+	updateKeychain(m, accessSeed, client, func(keychain *archethic.Keychain) {
+		keychain.AddService(serviceName, serviceDerivationPath, archethic.ED25519, archethic.SHA256)
+	})
+}
+
+func removeServiceFromKeychain(m *Model, accessSeed []byte, client archethic.APIClient, serviceName string) {
+	updateKeychain(m, accessSeed, client, func(keychain *archethic.Keychain) {
+		keychain.RemoveService(serviceName)
+	})
+}
+
+func updateKeychain(m *Model, accessSeed []byte, client archethic.APIClient, updateFunc func(*archethic.Keychain)) error {
+	keychain, err := archethic.GetKeychain(accessSeed, client)
+	if err != nil {
+		return err
+	}
+	updateFunc(keychain)
+
+	keychainGenesisAddress, err := archethic.DeriveAddress(keychain.Seed, 0, archethic.ED25519, archethic.SHA256)
+	if err != nil {
+		return err
+	}
+	addressHex := hex.EncodeToString(keychainGenesisAddress)
+	transactionChainIndex := client.GetLastTransactionIndex(addressHex)
+	transaction, err := archethic.NewKeychainTransactionWithIndex(keychain, uint32(transactionChainIndex))
+	if err != nil {
+		return err
+	}
+	originPrivateKey, _ := hex.DecodeString("01019280BDB84B8F8AEDBA205FE3552689964A5626EE2C60AA10E3BF22A91A036009")
+	transaction.OriginSign(originPrivateKey)
+
+	var returnedError error
+	returnedError = nil
+
+	ts := archethic.NewTransactionSender(&client)
+	ts.AddOnRequiredConfirmation(func(nbConf int) {
+		m.feedback = "\nKeychain's transaction confirmed."
+	})
+	ts.AddOnError(func(senderContext, message string) {
+		returnedError = errors.New(message)
+		ts.Unsubscribe("error")
+	})
+	ts.SendTransaction(transaction, 100, 60)
+
+	return returnedError
+}
+
 func (m Model) View() string {
 	var b strings.Builder
 
@@ -369,6 +482,11 @@ func (m Model) View() string {
 	fmt.Fprintf(&b, "\n\n%s\n\n", *button)
 
 	if m.keychain != nil {
+		var b2 strings.Builder
+		b2.WriteString("--------------------\n")
+		b2.WriteString("KEYCHAIN MANAGEMENT:\n")
+		b2.WriteString("--------------------\n\n")
+		b2.WriteString("List of services:\n")
 		for i, k := range m.serviceNames {
 
 			var u string
@@ -379,18 +497,50 @@ func (m Model) View() string {
 			}
 			u += k + " : " + m.keychain.Services[k].DerivationPath + "\n"
 			if m.focusIndex == i+len(m.inputs)+6 {
-				b.WriteString(focusedStyle.Render(u))
+				b2.WriteString(focusedStyle.Render(u))
 			} else {
-				b.WriteString(u)
+				b2.WriteString(u)
 			}
-			b.WriteString("\n")
+			b2.WriteString("\n")
+		}
+		b2.WriteString(helpStyle.Render("press 'enter' to select or 'd' to delete "))
+
+		if len(m.serviceNames) > 0 {
+			button := &createTransactionaccessBlurredButton
+			if m.focusIndex == len(m.inputs)+len(m.serviceNames)+6 {
+				button = &createTransactionFocusedButton
+			}
+			fmt.Fprintf(&b2, "\n\n\n%s\n\n", *button)
+		} else {
+			b2.WriteString("No service")
 		}
 
-		button := &createTransactionaccessBlurredButton
-		if m.focusIndex == len(m.inputs)+len(m.serviceNames)+6 {
-			button = &createTransactionFocusedButton
+		b2.WriteString("Add a service:\n")
+		// add fields for service name and derivation path
+		for i := range m.newServiceInputs {
+			b2.WriteRune('\n')
+			b2.WriteString(m.newServiceInputs[i].View())
 		}
-		fmt.Fprintf(&b, "\n\n%s\n\n", *button)
+		createServiceButton := &createServiceBlurredButton
+		if m.focusIndex == len(m.inputs)+len(m.serviceNames)+6+len(m.newServiceInputs)+1 {
+			createServiceButton = &createServiceFocusedButton
+		}
+		fmt.Fprintf(&b2, "\n\n%s\n\n", *createServiceButton)
+
+		dialogBoxStyle := lipgloss.NewStyle().
+			Border(lipgloss.RoundedBorder()).
+			BorderForeground(lipgloss.Color("#874BFD")).
+			Padding(1, 10).
+			BorderTop(true).
+			BorderLeft(true).
+			BorderRight(true).
+			BorderBottom(true)
+
+		dialog := lipgloss.Place(150, 9,
+			lipgloss.Left, lipgloss.Center,
+			dialogBoxStyle.Render(b2.String()),
+		)
+		b.WriteString(dialog)
 	}
 
 	b.WriteString(helpStyle.Render("press 'esc' to go back "))
