@@ -335,6 +335,10 @@ func createKeychain(m *Model) error {
 	randomSeed := make([]byte, 32)
 	rand.Read(randomSeed)
 
+	keychain := archethic.NewKeychain(randomSeed)
+	keychain.AddService("uco", "m/650'/0/0", archethic.ED25519, archethic.SHA256)
+	keychain.AddAuthorizedPublicKey(publicKey)
+
 	accessAddress, err := archethic.DeriveAddress(accessSeed, 1, archethic.ED25519, archethic.SHA256)
 	if err != nil {
 		return err
@@ -344,8 +348,7 @@ func createKeychain(m *Model) error {
 		return err
 	}
 
-	keychainTx, err := archethic.NewKeychainTransaction(randomSeed, [][]byte{publicKey})
-
+	keychainTx, err := archethic.NewKeychainTransaction(keychain, 0)
 	if err != nil {
 		return err
 	}
@@ -418,7 +421,7 @@ func updateKeychain(m *Model, accessSeed []byte, client archethic.APIClient, upd
 	}
 	addressHex := hex.EncodeToString(keychainGenesisAddress)
 	transactionChainIndex := client.GetLastTransactionIndex(addressHex)
-	transaction, err := archethic.NewKeychainTransactionWithIndex(keychain, uint32(transactionChainIndex))
+	transaction, err := archethic.NewKeychainTransaction(keychain, uint32(transactionChainIndex))
 	if err != nil {
 		return err
 	}
