@@ -123,6 +123,8 @@ func (m MainModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.generateAddress = newModel
 		cmd = newCmd
 	case keychainManagementView:
+		initCmd := m.keychainManagement.Init()
+		cmds = append(cmds, initCmd)
 		newKeychainManagement, newCmd := m.keychainManagement.Update(msg)
 		newModel, ok := newKeychainManagement.(keychainmanagementui.Model)
 		if !ok {

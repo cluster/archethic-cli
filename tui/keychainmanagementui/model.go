@@ -10,6 +10,7 @@ import (
 
 	"github.com/archethic-foundation/archethic-cli/tui/keychaincreatetransactionui"
 	archethic "github.com/archethic-foundation/libgo"
+	"github.com/charmbracelet/bubbles/spinner"
 	"github.com/charmbracelet/bubbles/textinput"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
@@ -17,7 +18,9 @@ import (
 
 // BackMsg change state back to project view
 type BackMsg bool
-type SendNewKeychainTransaction struct{}
+type SendNewKeychainTransaction struct {
+	Error error
+}
 
 var (
 	focusedStyle        = lipgloss.NewStyle().Foreground(lipgloss.Color("205"))
@@ -55,11 +58,16 @@ type Model struct {
 	keychainAccessTransactionAddress string
 	feedback                         string
 	showLoading                      bool
+	spinner                          spinner.Model
 }
 
 func New() Model {
+	s := spinner.New()
+	s.Spinner = spinner.Dot
+	s.Style = lipgloss.NewStyle().Foreground(lipgloss.Color("205"))
 	m := Model{
-		inputs: make([]textinput.Model, 2),
+		inputs:  make([]textinput.Model, 2),
+		spinner: s,
 	}
 
 	var t textinput.Model
@@ -83,17 +91,16 @@ func New() Model {
 }
 
 func (m Model) Init() tea.Cmd {
-	return textinput.Blink
+	return m.spinner.Tick
 }
 
 func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	urlBlockSize := len(urlType)
 	switch msg := msg.(type) {
 	case SendNewKeychainTransaction:
-		err := createKeychain(&m)
-		if err != nil {
+		if msg.Error != nil {
 			m.showLoading = false
-			m.feedback = err.Error()
+			m.feedback = msg.Error.Error()
 		}
 		return m, nil
 	case tea.KeyMsg:
@@ -124,7 +131,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				}
 				m.showLoading = true
 				return m, func() tea.Msg {
-					return SendNewKeychainTransaction{}
+					return SendNewKeychainTransaction{createKeychain(&m)}
 				}
 			}
 
@@ -193,6 +200,10 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.focusIndex = len(m.inputs) + urlBlockSize + 1 + serviceSize
 			}
 		}
+	default:
+		var cmd tea.Cmd
+		m.spinner, cmd = m.spinner.Update(msg)
+		return m, cmd
 	}
 
 	// Handle character input
@@ -223,7 +234,6 @@ func (m *Model) updateInputs(msg tea.Msg) []tea.Cmd {
 }
 
 func (m *Model) updateFocus(urlBlockSize int) []tea.Cmd {
-
 	cmds := make([]tea.Cmd, len(m.inputs))
 	for i := 0; i <= len(m.inputs)-1; i++ {
 		if i == m.focusIndex-urlBlockSize {
@@ -325,8 +335,7 @@ func (m Model) View() string {
 
 	if m.showLoading {
 		b.WriteString("\n\n")
-		b.WriteString("Loading...")
-		b.WriteString("\n\n")
+		b.WriteString(m.spinner.View())
 	}
 
 	createButton := &createBlurredButton
