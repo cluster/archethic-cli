@@ -466,7 +466,7 @@ func buildKeychainTransaction(seed []byte, client *archethic.APIClient, m *Model
 
 	index := client.GetLastTransactionIndex(hex.EncodeToString(genesisAddress))
 
-	err = keychain.(&m.transaction, m.serviceName, uint8(index))
+	err = keychain.BuildTransaction(&m.transaction, m.serviceName, uint8(index))
 	if err != nil {
 		return err
 	}
