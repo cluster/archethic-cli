@@ -157,7 +157,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					return m, nil
 				}
 				m.showLoading = true
-				err := validateInput(m)
+				err = validateInput(m)
 				if err != nil {
 					m.feedback = err.Error()
 					return m, nil
