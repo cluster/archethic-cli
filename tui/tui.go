@@ -50,8 +50,7 @@ func StartTea() {
 	}
 
 	m := New()
-	p = tea.NewProgram(m)
-	p.EnterAltScreen()
+	p = tea.NewProgram(m, tea.WithAltScreen())
 	if err := p.Start(); err != nil {
 		fmt.Println("Error running program:", err)
 		os.Exit(1)
@@ -123,12 +122,14 @@ func (m MainModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.generateAddress = newModel
 		cmd = newCmd
 	case keychainManagementView:
-		initCmd := m.keychainManagement.Init()
-		cmds = append(cmds, initCmd)
 		newKeychainManagement, newCmd := m.keychainManagement.Update(msg)
 		newModel, ok := newKeychainManagement.(keychainmanagementui.Model)
 		if !ok {
 			panic("could not perform assertion on keychainmanagement model")
+		}
+		if !newModel.IsInit {
+			cmds = append(cmds, newModel.Init())
+			newModel.IsInit = true
 		}
 		m.keychainManagement = newModel
 		cmd = newCmd

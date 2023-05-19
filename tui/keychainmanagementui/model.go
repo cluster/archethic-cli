@@ -19,7 +19,16 @@ import (
 // BackMsg change state back to project view
 type BackMsg bool
 type SendNewKeychainTransaction struct {
-	Error error
+	Model Model
+}
+type SendAccessKeychain struct {
+	Model Model
+}
+type SendRemoveService struct {
+	Model Model
+}
+type SendCreateService struct {
+	Model Model
 }
 
 var (
@@ -49,6 +58,7 @@ var (
 )
 
 type Model struct {
+	IsInit                           bool
 	focusIndex                       int
 	inputs                           []textinput.Model
 	newServiceInputs                 []textinput.Model
@@ -60,8 +70,11 @@ type Model struct {
 	keychainTransactionAddress       string
 	keychainAccessTransactionAddress string
 	feedback                         string
-	showLoading                      bool
-	spinner                          spinner.Model
+	showSpinnerCreate                bool
+	showSpinnerAccess                bool
+	showSpinnerDeleteService         bool
+	showSpinnerCreateService         bool
+	Spinner                          spinner.Model
 }
 
 func New() Model {
@@ -70,7 +83,7 @@ func New() Model {
 	s.Style = lipgloss.NewStyle().Foreground(lipgloss.Color("205"))
 	m := Model{
 		inputs:           make([]textinput.Model, 2),
-		spinner:          s,
+		Spinner:          s,
 		newServiceInputs: make([]textinput.Model, 2),
 	}
 
@@ -109,17 +122,39 @@ func New() Model {
 }
 
 func (m Model) Init() tea.Cmd {
-	return m.spinner.Tick
+	return m.Spinner.Tick
 }
 
 func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	urlBlockSize := len(urlType)
 	switch msg := msg.(type) {
 	case SendNewKeychainTransaction:
-		if msg.Error != nil {
-			m.showLoading = false
-			m.feedback = msg.Error.Error()
-		}
+		m.feedback = msg.Model.feedback
+		m.keychainSeed = msg.Model.keychainSeed
+		m.keychainTransactionAddress = msg.Model.keychainTransactionAddress
+		m.keychainAccessTransactionAddress = msg.Model.keychainAccessTransactionAddress
+		m.showSpinnerCreate = false
+		return m, nil
+	case SendAccessKeychain:
+		m.keychain = msg.Model.keychain
+		m.feedback = msg.Model.feedback
+		m.serviceNames = msg.Model.serviceNames
+		m.selectedService = msg.Model.selectedService
+		m.showSpinnerAccess = false
+		return m, nil
+	case SendRemoveService:
+		m.keychain = msg.Model.keychain
+		m.feedback = msg.Model.feedback
+		m.serviceNames = msg.Model.serviceNames
+		m.selectedService = msg.Model.selectedService
+		m.showSpinnerDeleteService = false
+		return m, nil
+	case SendCreateService:
+		m.keychain = msg.Model.keychain
+		m.feedback = msg.Model.feedback
+		m.serviceNames = msg.Model.serviceNames
+		m.selectedService = msg.Model.selectedService
+		m.showSpinnerCreateService = false
 		return m, nil
 	case tea.KeyMsg:
 		switch msg.String() {
@@ -135,10 +170,11 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			// select service
 			if m.focusIndex > len(m.inputs)+urlBlockSize+1 && m.focusIndex < len(m.inputs)+urlBlockSize+2+len(m.serviceNames) {
 				selectedService := m.focusIndex - len(m.inputs) - urlBlockSize - 2
-				removeServiceFromKeychain(&m, []byte(m.inputs[1].Value()), *archethic.NewAPIClient(m.inputs[0].Value()), m.serviceNames[selectedService])
-				return accessKeychain(m)
+				m.showSpinnerDeleteService = true
+				return m, func() tea.Msg {
+					return SendRemoveService{removeServiceAndRefresh(&m, selectedService)}
+				}
 			}
-			return m, nil
 
 		case "enter":
 			if m.focusIndex < urlBlockSize {
@@ -156,7 +192,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					m.feedback = err.Error()
 					return m, nil
 				}
-				m.showLoading = true
+				m.showSpinnerCreate = true
 				err = validateInput(m)
 				if err != nil {
 					m.feedback = err.Error()
@@ -169,15 +205,18 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 			// access keychain button
 			if m.focusIndex == len(m.inputs)+5 {
-				return accessKeychain(m)
+				m.showSpinnerAccess = true
+				return m, func() tea.Msg {
+					return SendAccessKeychain{accessKeychain(&m)}
+				}
 			}
 
 			// add service
 			if m.focusIndex == len(m.inputs)+6+len(m.serviceNames)+1+len(m.newServiceInputs) {
-				addServiceToKeychain(&m, []byte(m.inputs[1].Value()), *archethic.NewAPIClient(m.inputs[0].Value()), m.newServiceInputs[0].Value(), m.newServiceInputs[1].Value())
-				m.newServiceInputs[0].SetValue("")
-				m.newServiceInputs[1].SetValue("")
-				return accessKeychain(m)
+				m.showSpinnerCreateService = true
+				return m, func() tea.Msg {
+					return SendCreateService{addService(&m)}
+				}
 			}
 
 			// select service
@@ -225,7 +264,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 	default:
 		var cmd tea.Cmd
-		m.spinner, cmd = m.spinner.Update(msg)
+		m.Spinner, cmd = m.Spinner.Update(msg)
 		return m, cmd
 	}
 
@@ -237,24 +276,37 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	return m, tea.Batch(cmds...)
 }
 
-func accessKeychain(m Model) (Model, tea.Cmd) {
-	err := validateInput(m)
+func addService(m *Model) Model {
+	addServiceToKeychain(m, []byte(m.inputs[1].Value()), *archethic.NewAPIClient(m.inputs[0].Value()), m.newServiceInputs[0].Value(), m.newServiceInputs[1].Value())
+	m.newServiceInputs[0].SetValue("")
+	m.newServiceInputs[1].SetValue("")
+	m.focusIndex++
+	return accessKeychain(m)
+}
+
+func removeServiceAndRefresh(m *Model, selectedService int) Model {
+	removeServiceFromKeychain(m, []byte(m.inputs[1].Value()), *archethic.NewAPIClient(m.inputs[0].Value()), m.serviceNames[selectedService])
+	return accessKeychain(m)
+}
+
+func accessKeychain(m *Model) Model {
+	err := validateInput(*m)
 	m.feedback = ""
 	if err != nil {
 		m.feedback = err.Error()
-		return m, nil
+		return *m
 	}
 	url := m.inputs[0].Value()
 	seed, err := archethic.MaybeConvertToHex(m.inputs[1].Value())
 	if err != nil {
 		m.feedback = err.Error()
-		return m, nil
+		return *m
 	}
 	client := archethic.NewAPIClient(url)
 	m.keychain, err = archethic.GetKeychain(seed, *client)
 	if err != nil {
 		m.feedback = err.Error()
-		return m, nil
+		return *m
 	}
 	m.serviceNames = make([]string, 0, len(m.keychain.Services))
 	for k := range m.keychain.Services {
@@ -262,7 +314,7 @@ func accessKeychain(m Model) (Model, tea.Cmd) {
 	}
 	sort.Strings(m.serviceNames)
 	m.selectedService = 0
-	return m, nil
+	return *m
 }
 
 func validateInput(m Model) error {
@@ -319,17 +371,19 @@ func (m *Model) updateFocus(urlBlockSize int) []tea.Cmd {
 	return cmds
 }
 
-func createKeychain(m *Model) error {
+func createKeychain(m *Model) Model {
 	url := m.inputs[0].Value()
 	accessSeed, err := archethic.MaybeConvertToHex(m.inputs[1].Value())
 	if err != nil {
-		return err
+		m.feedback = err.Error()
+		return *m
 	}
 	originPrivateKey, _ := hex.DecodeString("01019280BDB84B8F8AEDBA205FE3552689964A5626EE2C60AA10E3BF22A91A036009")
 
 	publicKey, _, err := archethic.DeriveKeypair(accessSeed, 0, archethic.ED25519)
 	if err != nil {
-		return err
+		m.feedback = err.Error()
+		return *m
 	}
 
 	randomSeed := make([]byte, 32)
@@ -341,23 +395,27 @@ func createKeychain(m *Model) error {
 
 	accessAddress, err := archethic.DeriveAddress(accessSeed, 1, archethic.ED25519, archethic.SHA256)
 	if err != nil {
-		return err
+		m.feedback = err.Error()
+		return *m
 	}
 	keychainAddress, err := archethic.DeriveAddress(randomSeed, 1, archethic.ED25519, archethic.SHA256)
 	if err != nil {
-		return err
+		m.feedback = err.Error()
+		return *m
 	}
 
 	keychainTx, err := archethic.NewKeychainTransaction(keychain, 0)
 	if err != nil {
-		return err
+		m.feedback = err.Error()
+		return *m
 	}
 	keychainTx.OriginSign(originPrivateKey)
 
 	client := archethic.NewAPIClient(url)
 	accessKeychain, _ := archethic.GetKeychain(accessSeed, *client)
 	if accessKeychain != nil {
-		return errors.New("keychain access already exists")
+		m.feedback = "Keychain access already exists"
+		return *m
 	}
 
 	ts := archethic.NewTransactionSender(client)
@@ -374,13 +432,11 @@ func createKeychain(m *Model) error {
 		accessTx.OriginSign(originPrivateKey)
 		ts2 := archethic.NewTransactionSender(client)
 		ts2.AddOnRequiredConfirmation(func(nbConf int) {
-			m.showLoading = false
 			m.feedback += "\nKeychain access transaction confirmed."
 			ts2.Unsubscribe("confirmation")
 			m.keychainAccessTransactionAddress = fmt.Sprintf("%s/explorer/transaction/%x", url, accessAddress)
 		})
 		ts2.AddOnError(func(senderContext, message string) {
-			m.showLoading = false
 			m.feedback += fmt.Sprintf("\nAccess transaction error: %s", message)
 			ts.Unsubscribe("error")
 		})
@@ -388,12 +444,11 @@ func createKeychain(m *Model) error {
 		ts.Unsubscribe("confirmation")
 	})
 	ts.AddOnError(func(senderContext, message string) {
-		m.showLoading = false
 		m.feedback += fmt.Sprintf("Keychain transaction error: %s", message)
 		ts.Unsubscribe("error")
 	})
 	ts.SendTransaction(keychainTx, 100, 60)
-	return nil
+	return *m
 }
 
 func addServiceToKeychain(m *Model, accessSeed []byte, client archethic.APIClient, serviceName string, serviceDerivationPath string) {
@@ -454,9 +509,9 @@ func (m Model) View() string {
 		b.WriteString(m.inputs[i].View())
 	}
 
-	if m.showLoading {
+	if m.showSpinnerCreate {
 		b.WriteString("\n\n")
-		b.WriteString(m.spinner.View())
+		b.WriteString(m.Spinner.View())
 	}
 
 	createButton := &createBlurredButton
@@ -478,6 +533,10 @@ func (m Model) View() string {
 		fmt.Fprintf(&b, "Keychain access transaction: %s\n", m.keychainAccessTransactionAddress)
 	}
 
+	if m.showSpinnerAccess {
+		b.WriteString("\n\n")
+		b.WriteString(m.Spinner.View())
+	}
 	button := &accessBlurredButton
 	if m.focusIndex == len(m.inputs)+5 {
 		button = &accessFocusedButton
@@ -508,6 +567,11 @@ func (m Model) View() string {
 		}
 		b2.WriteString(helpStyle.Render("press 'enter' to select or 'd' to delete "))
 
+		if m.showSpinnerDeleteService {
+			b2.WriteString("\n\n")
+			b2.WriteString(m.Spinner.View())
+		}
+
 		if len(m.serviceNames) > 0 {
 			button := &createTransactionaccessBlurredButton
 			if m.focusIndex == len(m.inputs)+len(m.serviceNames)+6 {
@@ -524,6 +588,12 @@ func (m Model) View() string {
 			b2.WriteRune('\n')
 			b2.WriteString(m.newServiceInputs[i].View())
 		}
+
+		if m.showSpinnerCreateService {
+			b2.WriteString("\n\n")
+			b2.WriteString(m.Spinner.View())
+		}
+
 		createServiceButton := &createServiceBlurredButton
 		if m.focusIndex == len(m.inputs)+len(m.serviceNames)+6+len(m.newServiceInputs)+1 {
 			createServiceButton = &createServiceFocusedButton
