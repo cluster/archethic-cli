@@ -139,6 +139,10 @@ func (m MainModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if !ok {
 			panic("could not perform assertion on keychainmanagement model")
 		}
+		if !newModel.IsInit {
+			cmds = append(cmds, newModel.Init())
+			newModel.IsInit = true
+		}
 		m.keychainCreateTransaction = newModel
 		cmd = newCmd
 	}

@@ -7,8 +7,10 @@ import (
 	"strings"
 
 	archethic "github.com/archethic-foundation/libgo"
+	"github.com/charmbracelet/bubbles/spinner"
 	"github.com/charmbracelet/bubbles/textinput"
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/charmbracelet/lipgloss"
 )
 
 type OwnershipsModel struct {
@@ -20,12 +22,19 @@ type OwnershipsModel struct {
 	secretKey              []byte
 	transaction            *archethic.TransactionBuilder
 	feedback               string
+	showSpinner            bool
+	Spinner                spinner.Model
+	IsInit                 bool
 }
 
 type AddOwnership struct {
 	Cipher         []byte
 	AuthorizedKeys []archethic.AuthorizedKey
 	cmds           []tea.Cmd
+}
+
+type SendUpdateStorageNouncePublicKey struct {
+	OwnershipsModel OwnershipsModel
 }
 
 type UpdateStorageNouncePublicKey struct {
@@ -37,10 +46,15 @@ type DeleteOwnership struct {
 
 func NewOwnershipsModel(secretKey []byte, transaction *archethic.TransactionBuilder) OwnershipsModel {
 
+	s := spinner.New()
+	s.Spinner = spinner.Dot
+	s.Style = lipgloss.NewStyle().Foreground(lipgloss.Color("205"))
+
 	m := OwnershipsModel{
 		ownershipsInputs: make([]textinput.Model, 2),
 		secretKey:        secretKey,
 		transaction:      transaction,
+		Spinner:          s,
 	}
 	for i := range m.ownershipsInputs {
 		t := textinput.New()
@@ -60,7 +74,7 @@ func NewOwnershipsModel(secretKey []byte, transaction *archethic.TransactionBuil
 }
 
 func (m OwnershipsModel) Init() tea.Cmd {
-	return nil
+	return m.Spinner.Tick
 }
 
 func (m OwnershipsModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
@@ -89,12 +103,9 @@ func (m OwnershipsModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					return m, nil
 				}
 				if m.storageNouncePublicKey == "" {
-					client := archethic.NewAPIClient(m.url)
-					var err error
-					m.storageNouncePublicKey, err = client.GetStorageNoncePublicKey()
-					if err != nil {
-						m.feedback = fmt.Sprintf("%s", err)
-						return m, nil
+					m.showSpinner = true
+					return m, func() tea.Msg {
+						return loadStorageNouncePublicKey(m)
 					}
 				}
 				m.ownershipsInputs[1].SetValue(m.storageNouncePublicKey)
@@ -167,11 +178,30 @@ func (m OwnershipsModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 
 		}
+	case UpdateStorageNouncePublicKey:
+		m.showSpinner = false
+		return m, nil
+	default:
+		var cmd tea.Cmd
+		m.Spinner, cmd = m.Spinner.Update(msg)
+		return m, cmd
 	}
 	m, cmds := updateOwnershipsFocus(m)
 	cmds = append(cmds, m.updateOwnershipsInputs(msg)...)
 
 	return m, tea.Batch(cmds...)
+}
+
+func loadStorageNouncePublicKey(m OwnershipsModel) UpdateStorageNouncePublicKey {
+	client := archethic.NewAPIClient(m.url)
+	var err error
+	m.storageNouncePublicKey, err = client.GetStorageNoncePublicKey()
+	if err != nil {
+		m.feedback = fmt.Sprintf("%s", err)
+	}
+	m.ownershipsInputs[1].SetValue(m.storageNouncePublicKey)
+	m.showSpinner = false
+	return UpdateStorageNouncePublicKey{StorageNouncePublicKey: m.storageNouncePublicKey}
 }
 
 func addAuthorizedKey(m *OwnershipsModel) error {
@@ -266,7 +296,11 @@ func (m OwnershipsModel) View() string {
 	if m.focusInput == len(m.ownershipsInputs)+len(m.authorizedKeys)+1 {
 		buttonLoadStorageNouncePK = &focusedLoadStorageNouncePK
 	}
-	fmt.Fprintf(&b, "\n\n%s", *buttonLoadStorageNouncePK)
+	b.WriteString("\n\n")
+	if m.showSpinner {
+		b.WriteString(m.Spinner.View())
+	}
+	fmt.Fprintf(&b, "%s", *buttonLoadStorageNouncePK)
 
 	button := &blurredButton
 	if m.focusInput == len(m.ownershipsInputs)+len(m.authorizedKeys)+2 {
