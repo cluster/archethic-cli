@@ -10,6 +10,7 @@ import (
 	"strings"
 
 	archethic "github.com/archethic-foundation/libgo"
+	"github.com/charmbracelet/bubbles/spinner"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 )
@@ -22,6 +23,11 @@ type CreateTransactionMsg struct {
 	ServiceName string
 	Seed        string
 	Url         string
+}
+
+type TransactionSent struct {
+	Error error
+	Model Model
 }
 
 var (
@@ -80,15 +86,22 @@ type Model struct {
 	feedback               string
 	url                    string
 	transactionIndex       int
+	showSpinner            bool
+	Spinner                spinner.Model
+	IsInit                 bool
 }
 
 func New() Model {
+	s := spinner.New()
+	s.Spinner = spinner.Dot
+	s.Style = lipgloss.NewStyle().Foreground(lipgloss.Color("205"))
 	key := make([]byte, 32)
 	rand.Read(key)
 	m := Model{
 		activeTab:   MAIN_TAB,
 		transaction: *archethic.NewTransaction(archethic.KeychainAccessType),
 		secretKey:   key,
+		Spinner:     s,
 	}
 
 	m.Tabs = []string{"Main", "UCO Transfers", "Token Transfers", "Recipients", "Ownerships", "Content", "Smart Contract"}
@@ -120,7 +133,7 @@ func curveValidator(s string) error {
 }
 
 func (m Model) Init() tea.Cmd {
-	return nil
+	return m.Spinner.Tick
 }
 
 func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
@@ -143,10 +156,18 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		cmds = msg.cmds
 	case UpdateTransactionType:
 		m.transaction.SetType(msg.TransactionType)
+	case TransactionSent:
+		m.showSpinner = false
+		if msg.Error != nil {
+			m.feedback = msg.Error.Error()
+		} else {
+			m.feedback = msg.Model.feedback
+		}
+		return m, nil
 	case SendTransaction:
-		err := sendTransaction(&m, msg.Curve, msg.Seed)
-		if err != nil {
-			m.feedback = err.Error()
+		m.showSpinner = true
+		return m, func() tea.Msg {
+			return sendTransaction(&m, msg.Curve, msg.Seed)
 		}
 	case ResetInterface:
 		m.resetInterface()
@@ -168,6 +189,10 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		cmds = msg.cmds
 	case UpdateStorageNouncePublicKey:
 		m.storageNouncePublicKey = msg.StorageNouncePublicKey
+		// need to send back the message to ownerships model to update the spinner
+		w, _ := m.ownershipsModel.Update(msg)
+		m.ownershipsModel = w.(OwnershipsModel)
+		return m, nil
 	case DeleteUcoTransfer:
 		m.transaction.Data.Ledger.Uco.Transfers = append(m.transaction.Data.Ledger.Uco.Transfers[:msg.IndexToDelete], m.transaction.Data.Ledger.Uco.Transfers[msg.IndexToDelete+1:]...)
 		m.ucoTransferModel.transaction = &m.transaction
@@ -271,7 +296,16 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				return m, cmds
 			}
 		}
-
+	default:
+		var cmds []tea.Cmd
+		spinner, newCmd := m.Spinner.Update(msg)
+		m.Spinner = spinner
+		cmds = append(cmds, newCmd)
+		// also update the spinner from the ownerships tab
+		spinnerOwnership, cmd2 := m.ownershipsModel.Spinner.Update(msg)
+		m.ownershipsModel.Spinner = spinnerOwnership
+		cmds = append(cmds, cmd2)
+		return m, tea.Batch(cmds...)
 	}
 	return m, tea.Batch(cmds...)
 }
@@ -288,7 +322,13 @@ func focusOnTab(m *Model) []tea.Cmd {
 	case RECIPIENTS_TAB:
 		m.recipientsModel, cmds = m.recipientsModel.SwitchTab()
 	case OWNERSHIPS_TAB:
-		m.ownershipsModel, cmds = m.ownershipsModel.SwitchTab()
+		if !m.ownershipsModel.IsInit {
+			cmds = append(cmds, m.ownershipsModel.Init())
+			m.ownershipsModel.IsInit = true
+		}
+		ownershipsModel, switchTabCmd := m.ownershipsModel.SwitchTab()
+		m.ownershipsModel = ownershipsModel
+		cmds = append(cmds, switchTabCmd...)
 	case SMART_CONTRACT_TAB:
 		m.smartContractModel, cmds = m.smartContractModel.SwitchTab()
 	case CONTENT_TAB:
@@ -352,6 +392,10 @@ func (m Model) View() string {
 	case MAIN_TAB:
 		b.WriteString(m.mainModel.View())
 		b.WriteString("\n\n")
+		if m.showSpinner {
+			b.WriteString("\n\n")
+			b.WriteString(m.Spinner.View())
+		}
 		b.WriteString(m.feedback)
 	case UCO_TAB:
 		b.WriteString(m.ucoTransferModel.View())
@@ -386,18 +430,18 @@ func min(a, b int) int {
 	return b
 }
 
-func sendTransaction(m *Model, curve archethic.Curve, seedStr string) error {
+func sendTransaction(m *Model, curve archethic.Curve, seedStr string) TransactionSent {
 	m.feedback = ""
 	seed, err := archethic.MaybeConvertToHex(seedStr)
 	if err != nil {
-		return err
+		return TransactionSent{Model: *m, Error: err}
 	}
 	if len(m.transaction.Data.Code) > 0 {
 		ownershipIndex := -1
 		for i, ownership := range m.transaction.Data.Ownerships {
 			decryptSecret, err := archethic.AesDecrypt(ownership.Secret, m.secretKey)
 			if err != nil {
-				return err
+				return TransactionSent{Model: *m, Error: err}
 			}
 			decodedSecret := string(decryptSecret)
 
@@ -408,7 +452,7 @@ func sendTransaction(m *Model, curve archethic.Curve, seedStr string) error {
 		}
 
 		if ownershipIndex == -1 {
-			return errors.New("you need to create an ownership with the transaction seed as secret and authorize node public key to let nodes generate new transaction from your smart contract")
+			return TransactionSent{Model: *m, Error: errors.New("you need to create an ownership with the transaction seed as secret and authorize node public key to let nodes generate new transaction from your smart contract")}
 		} else {
 			authorizedKeyIndex := -1
 			for i, authKey := range m.transaction.Data.Ownerships[ownershipIndex].AuthorizedKeys {
@@ -419,7 +463,7 @@ func sendTransaction(m *Model, curve archethic.Curve, seedStr string) error {
 			}
 
 			if authorizedKeyIndex == -1 {
-				return errors.New("you need to create an ownership with the transaction seed as secret and authorize node public key to let nodes generate new transaction from your smart contract")
+				return TransactionSent{Model: *m, Error: errors.New("you need to create an ownership with the transaction seed as secret and authorize node public key to let nodes generate new transaction from your smart contract")}
 			}
 		}
 	}
@@ -429,7 +473,7 @@ func sendTransaction(m *Model, curve archethic.Curve, seedStr string) error {
 	if m.serviceMode {
 		err = buildKeychainTransaction(seed, client, m)
 		if err != nil {
-			return err
+			return TransactionSent{Model: *m, Error: err}
 		}
 	} else {
 		m.transaction.Build(seed, uint32(m.transactionIndex), curve, archethic.SHA256)
@@ -448,7 +492,7 @@ func sendTransaction(m *Model, curve archethic.Curve, seedStr string) error {
 	})
 
 	ts.SendTransaction(&m.transaction, 100, 60)
-	return nil
+	return TransactionSent{Model: *m, Error: nil}
 }
 
 func buildKeychainTransaction(seed []byte, client *archethic.APIClient, m *Model) error {
