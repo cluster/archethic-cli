@@ -166,16 +166,6 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				return BackMsg(true)
 			}
 
-		case "d":
-			// select service
-			if m.focusIndex > len(m.inputs)+urlBlockSize+1 && m.focusIndex < len(m.inputs)+urlBlockSize+2+len(m.serviceNames) {
-				selectedService := m.focusIndex - len(m.inputs) - urlBlockSize - 2
-				m.showSpinnerDeleteService = true
-				return m, func() tea.Msg {
-					return SendRemoveService{removeServiceAndRefresh(&m, selectedService)}
-				}
-			}
-
 		case "enter":
 			if m.focusIndex < urlBlockSize {
 				u := urlType[m.focusIndex]
@@ -234,7 +224,6 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					}
 				}
 			}
-
 		// Set focus to next input
 		case "tab", "shift+tab", "up", "down":
 			s := msg.String()
@@ -260,6 +249,21 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.focusIndex = 0
 			} else if m.focusIndex < 0 {
 				m.focusIndex = len(m.inputs) + urlBlockSize + 2 + serviceSize + newServiceFormSize
+			}
+		default:
+			// remove the highlighted service
+			if msg.String() == "d" && m.focusIndex > len(m.inputs)+urlBlockSize+1 && m.focusIndex < len(m.inputs)+urlBlockSize+2+len(m.serviceNames) {
+				selectedService := m.focusIndex - len(m.inputs) - urlBlockSize - 2
+				m.showSpinnerDeleteService = true
+				return m, func() tea.Msg {
+					return SendRemoveService{removeServiceAndRefresh(&m, selectedService)}
+				}
+			}
+			// set a default derivation path
+			if m.focusIndex == len(m.inputs)+6+len(m.serviceNames)+1 {
+				serviceName := m.newServiceInputs[0].Value()
+				derivationPath := "m/650'/" + serviceName + msg.String() + "/0"
+				m.newServiceInputs[1].SetValue(derivationPath)
 			}
 		}
 	default:
