@@ -3,7 +3,7 @@ module github.com/archethic-foundation/archethic-cli
 go 1.20
 
 require (
-	github.com/archethic-foundation/libgo v0.0.0-unpublished
+	github.com/archethic-foundation/libgo v1.0.1
 	github.com/charmbracelet/bubbles v0.13.0
 	github.com/charmbracelet/bubbletea v0.22.1
 	github.com/charmbracelet/lipgloss v0.5.0
@@ -38,6 +38,3 @@ require (
 	golang.org/x/text v0.7.0 // indirect
 	nhooyr.io/websocket v1.8.7 // indirect
 )
-
-// TODO: needs to be removed when package is published
-replace github.com/archethic-foundation/libgo v0.0.0-unpublished => ../libgo
