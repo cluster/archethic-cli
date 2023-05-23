@@ -145,6 +145,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.url = msg.Url
 		w, cmds := m.mainModel.Update(msg)
 		m.mainModel = w.(MainModel)
+		m.ownershipsModel.SetUrl(m.url)
 		return m, cmds
 	case UpdateTransactionIndex:
 		m.transactionIndex = msg.Index
