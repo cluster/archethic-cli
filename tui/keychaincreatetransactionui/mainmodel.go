@@ -126,9 +126,10 @@ func (m MainModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		switch keypress := msg.String(); keypress {
 
 		case "up", "down":
+			previousFocus := m.focusInput
 			updateMainFocusInput(&m, keypress)
 			// if the seed or the curve are blured, they are probably updated, so update the transaction index
-			if m.focusInput == URL_INDEX || m.focusInput == TRANSACTION_INDEX_FIELD_INDEX {
+			if previousFocus == SEED_INDEX || previousFocus == CURVE_INDEX {
 				client := archethic.NewAPIClient(m.mainInputs[0].Value())
 				seed, err := archethic.MaybeConvertToHex(m.mainInputs[1].Value())
 				if err != nil {
