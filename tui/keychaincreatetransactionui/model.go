@@ -23,6 +23,7 @@ type CreateTransactionMsg struct {
 	ServiceName string
 	Seed        string
 	Url         string
+	PvKeyBytes  []byte
 }
 
 type TransactionSent struct {
