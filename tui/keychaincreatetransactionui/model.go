@@ -120,6 +120,9 @@ func (m *Model) resetInterface() {
 }
 
 func numberValidator(s string) error {
+	if s == "" {
+		return nil
+	}
 	_, err := strconv.ParseInt(s, 10, 32)
 	return err
 }
@@ -226,7 +229,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.contentModel = w.(ContentModel)
 				return m, cmds
 			} else {
-				return m, func() tea.Msg {
+				return New(), func() tea.Msg {
 					return BackMsg(true)
 				}
 			}

@@ -107,7 +107,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, tea.Quit
 
 		case "esc":
-			return m, func() tea.Msg {
+			return New(), func() tea.Msg {
 				return BackMsg(true)
 			}
 
