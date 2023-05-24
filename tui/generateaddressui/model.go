@@ -232,7 +232,7 @@ func (m Model) View() string {
 	if m.generatedAddress != "" {
 		b.WriteString("The generated address is: " + m.generatedAddress)
 	}
-
+	b.WriteString("\n\n")
 	b.WriteString(helpStyle.Render("press 'esc' to go back "))
 
 	return b.String()

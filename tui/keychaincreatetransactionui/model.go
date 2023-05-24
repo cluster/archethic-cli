@@ -64,6 +64,8 @@ const (
 	MAIN_RESET_BUTTON_INDEX       = 18
 	FIRST_TRANSACTION_TYPE_INDEX  = 8
 	URL_INDEX                     = 4
+	SEED_INDEX                    = 5
+	CURVE_INDEX                   = 6
 	TRANSACTION_INDEX_FIELD_INDEX = 7
 )
 
