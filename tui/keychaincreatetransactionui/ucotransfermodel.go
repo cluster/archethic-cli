@@ -66,9 +66,10 @@ func (m UcoTransferModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		case "enter":
 
 			if m.focusInput == len(m.ucoInputs) {
+				m.feedback = ""
 				toHex := m.ucoInputs[0].Value()
 				to, err := hex.DecodeString(toHex)
-				if err != nil {
+				if toHex == "" || err != nil {
 					m.feedback = "Invalid address"
 					return m, nil
 				}

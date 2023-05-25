@@ -71,7 +71,7 @@ func (m TokenTransferModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			if m.focusInput == len(m.tokenInputs) {
 				toHex := m.tokenInputs[0].Value()
 				to, err := hex.DecodeString(toHex)
-				if err != nil {
+				if toHex == "" || err != nil {
 					m.feedback = "Invalid address"
 					return m, nil
 				}
@@ -83,7 +83,7 @@ func (m TokenTransferModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				}
 				tokenAddressHex := m.tokenInputs[2].Value()
 				tokenAddress, err := hex.DecodeString(tokenAddressHex)
-				if err != nil {
+				if tokenAddressHex == "" || err != nil {
 					m.feedback = "Invalid token address"
 					return m, nil
 				}
