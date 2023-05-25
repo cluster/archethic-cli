@@ -155,7 +155,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.serviceNames = msg.Model.serviceNames
 		m.selectedService = msg.Model.selectedService
 		m.showSpinnerCreateService = false
-		return m, nil
+		cmds := m.updateInputs(msg)
+		return m, tea.Batch(cmds...)
 	case tea.KeyMsg:
 		switch msg.String() {
 		case "ctrl+c":
@@ -622,6 +623,7 @@ func (m Model) View() string {
 		b.WriteString(dialog)
 	}
 
+	b.WriteString("\n\n")
 	b.WriteString(helpStyle.Render("press 'esc' to go back "))
 
 	return b.String()
