@@ -87,6 +87,7 @@ type Model struct {
 	serviceMode            bool
 	feedback               string
 	url                    string
+	seed                   string
 	transactionIndex       int
 	showSpinner            bool
 	Spinner                spinner.Model
@@ -112,6 +113,7 @@ func New() Model {
 }
 
 func (m *Model) resetInterface() {
+	m.transaction = *archethic.NewTransaction(archethic.KeychainAccessType)
 	m.mainModel = NewMainModel()
 	m.ucoTransferModel = NewUcoTransferModel(&m.transaction)
 	m.tokenTransferModel = NewTokenTransferModel(&m.transaction)
@@ -119,6 +121,15 @@ func (m *Model) resetInterface() {
 	m.ownershipsModel = NewOwnershipsModel(m.secretKey, &m.transaction)
 	m.contentModel = NewContentModel()
 	m.smartContractModel = NewSmartContractModel()
+	if m.serviceMode {
+		w, _ := m.mainModel.Update(CreateTransactionMsg{
+			ServiceName: m.serviceName,
+			Url:         m.url,
+			Seed:        m.seed,
+		})
+		m.mainModel = w.(MainModel)
+		m.ownershipsModel.SetUrl(m.url)
+	}
 }
 
 func numberValidator(s string) error {
@@ -145,6 +156,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	var cmds []tea.Cmd
 	switch msg := msg.(type) {
 	case CreateTransactionMsg:
+		m.seed = msg.Seed
 		m.serviceName = msg.ServiceName
 		m.serviceMode = m.serviceName != ""
 		m.url = msg.Url
@@ -419,6 +431,8 @@ func (m Model) View() string {
 	b.WriteString("\n\n")
 	tabContent = b.String()
 	doc.WriteString(windowStyle.Width((lipgloss.Width(row) - windowStyle.GetHorizontalFrameSize())).Render(tabContent))
+	doc.WriteString("\n\n")
+	doc.WriteString(helpStyle.Render("press 'esc' to go back "))
 	return docStyle.Render(doc.String())
 }
 

@@ -92,8 +92,6 @@ func updateRecipientsFocus(m RecipientsModel) (RecipientsModel, []tea.Cmd) {
 	cmds := make([]tea.Cmd, 0)
 	if m.focusInput == 0 {
 		cmds = append(cmds, m.recipientsInput.Focus())
-		m.recipientsInput.PromptStyle = focusedStyle
-		m.recipientsInput.TextStyle = focusedStyle
 	} else {
 		m.recipientsInput.Blur()
 		m.recipientsInput.PromptStyle = noStyle
