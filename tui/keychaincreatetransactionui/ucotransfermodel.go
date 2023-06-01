@@ -75,6 +75,7 @@ func (m UcoTransferModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				}
 				amountStr := m.ucoInputs[1].Value()
 				amount, err := strconv.ParseUint(amountStr, 10, 64)
+				amount *= 1e8
 				if err != nil {
 					m.feedback = "Invalid amount"
 					return m, nil
@@ -181,7 +182,7 @@ func (m UcoTransferModel) View() string {
 
 	startCount := len(m.ucoInputs) + 1 // +1 for the button
 	for i, t := range m.transaction.Data.Ledger.Uco.Transfers {
-		transfer := fmt.Sprintf("%s: %d\n", hex.EncodeToString(t.To), t.Amount)
+		transfer := fmt.Sprintf("%s: %d\n", hex.EncodeToString(t.To), t.Amount/1e8)
 		if m.focusInput == startCount+i {
 			b.WriteString(focusedStyle.Render(transfer))
 			continue
