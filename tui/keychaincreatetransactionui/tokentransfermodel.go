@@ -77,6 +77,7 @@ func (m TokenTransferModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				}
 				amountStr := m.tokenInputs[1].Value()
 				amount, err := strconv.ParseUint(amountStr, 10, 64)
+				amount *= 1e8
 				if err != nil {
 					m.feedback = "Invalid amount"
 					return m, nil
@@ -186,7 +187,7 @@ func (m TokenTransferModel) View() string {
 
 	startCount := len(m.tokenInputs) + 1 // +1 for the button
 	for i, t := range m.transaction.Data.Ledger.Token.Transfers {
-		transfer := fmt.Sprintf("%s : %d - %s %d \n", hex.EncodeToString(t.To), t.Amount, hex.EncodeToString(t.TokenAddress), t.TokenId)
+		transfer := fmt.Sprintf("%s : %d - %s %d \n", hex.EncodeToString(t.To), t.Amount/1e8, hex.EncodeToString(t.TokenAddress), t.TokenId)
 		if m.focusInput == startCount+i {
 			b.WriteString(focusedStyle.Render(transfer))
 			continue
