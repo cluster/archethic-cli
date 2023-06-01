@@ -225,9 +225,12 @@ func SendTransaction(transaction archethic.TransactionBuilder, secretKey []byte,
 			return "", err
 		}
 	} else {
-		transaction.Build(seed, uint32(transactionIndex), curve, archethic.SHA256)
-
+		err := transaction.Build(seed, uint32(transactionIndex), curve, archethic.SHA256)
+		if err != nil {
+			return "", err
+		}
 	}
+
 	originPrivateKey, _ := hex.DecodeString("01019280BDB84B8F8AEDBA205FE3552689964A5626EE2C60AA10E3BF22A91A036009")
 	transaction.OriginSign(originPrivateKey)
 
