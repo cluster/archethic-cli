@@ -18,8 +18,7 @@ type UpdateContent struct {
 func NewContentModel() ContentModel {
 	m := ContentModel{}
 	m.contentTextAreaInput = textarea.New()
-	// passing 0 or a negative number here doesn't seem to work...
-	m.contentTextAreaInput.CharLimit = 100000000000
+	m.contentTextAreaInput.CharLimit = 0
 	m.contentTextAreaInput.SetWidth(150)
 
 	return m

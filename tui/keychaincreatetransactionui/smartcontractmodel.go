@@ -18,8 +18,7 @@ type UpdateSmartContract struct {
 func NewSmartContractModel() SmartContractModel {
 	m := SmartContractModel{}
 	m.smartContractTextAreaInput = textarea.New()
-	// passing 0 or a negative number here doesn't seem to work...
-	m.smartContractTextAreaInput.CharLimit = 100000000000
+	m.smartContractTextAreaInput.CharLimit = 0
 	m.smartContractTextAreaInput.SetWidth(150)
 	return m
 }
