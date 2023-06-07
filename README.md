@@ -12,7 +12,9 @@ This command line interface enables you to interact with the Archethic's blockch
 
 ## Installation
 
-Install it with go:
+Download a pre-compiled binary or package from the [releases](https://github.com/archethic-foundation/archethic-cli/releases) page.
+
+Or install it with go:
 
 ```bash
 go install github.com/archethic-foundation/archethic-cli@latest
