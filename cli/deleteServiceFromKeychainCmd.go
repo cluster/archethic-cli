@@ -16,19 +16,11 @@ func GetDeleteServiceFromKeychainCmd() *cobra.Command {
 			accessSeed, _ := cmd.Flags().GetString("access-seed")
 			serviceName, _ := cmd.Flags().GetString("service-name")
 
-			fmt.Println("Deleting service from keychain...")
 			accessSeedBytes, err := archethic.MaybeConvertToHex(accessSeed)
-			if err != nil {
-				fmt.Println(err)
-				return
-			}
+			cobra.CheckErr(err)
 			feedback, err := tuiutils.RemoveServiceFromKeychain(accessSeedBytes, endpoint.String(), serviceName)
-			if err != nil {
-				fmt.Println(err)
-				return
-			} else {
-				fmt.Println(feedback)
-			}
+			cobra.CheckErr(err)
+			fmt.Println(feedback)
 		},
 	}
 	deleteServiceFromKeychainCmd.Flags().Var(&endpoint, "endpoint", "Endpoint (local|testnet|mainnet|[custom url])")

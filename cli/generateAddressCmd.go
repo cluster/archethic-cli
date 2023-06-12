@@ -16,29 +16,15 @@ func GetGenerateAddressCmd() *cobra.Command {
 			seed, _ := cmd.Flags().GetString("seed")
 			index, _ := cmd.Flags().GetInt("index")
 
-			fmt.Println("Generating address...")
 			curve, err := ellipticCurve.GetCurve()
-			if err != nil {
-				fmt.Println(err)
-				return
-			}
+			cobra.CheckErr(err)
 			hashAlgo, err := hashAlgo.GetHashAlgo()
-			if err != nil {
-				fmt.Println(err)
-				return
-			}
+			cobra.CheckErr(err)
 			seedBytes, err := archethic.MaybeConvertToHex(seed)
-			if err != nil {
-				fmt.Println(err)
-				return
-			}
+			cobra.CheckErr(err)
 			address, err := archethic.DeriveAddress(seedBytes, uint32(index), curve, hashAlgo)
-			if err != nil {
-				fmt.Println(err)
-				return
-			} else {
-				fmt.Println("Address:", hex.EncodeToString(address))
-			}
+			cobra.CheckErr(err)
+			fmt.Println(hex.EncodeToString(address))
 		},
 	}
 

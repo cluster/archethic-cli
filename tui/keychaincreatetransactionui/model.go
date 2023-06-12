@@ -452,7 +452,7 @@ func min(a, b int) int {
 func sendTransaction(m *Model, curve archethic.Curve, seedStr string) TransactionSent {
 	m.feedback = ""
 	feedback, error := tuiutils.SendTransaction(m.transaction, m.secretKey, curve, m.serviceMode, m.url, m.transactionIndex, m.serviceName, m.storageNouncePublicKey, seedStr)
-	m.feedback = feedback
+	m.feedback = fmt.Sprintf("Transaction sent: %s", feedback)
 	if error != nil {
 		return TransactionSent{Model: *m, Error: error}
 	}

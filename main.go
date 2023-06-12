@@ -1,24 +1,26 @@
 package main
 
 import (
-	"fmt"
-	"os"
-
 	"github.com/archethic-foundation/archethic-cli/cli"
 	"github.com/archethic-foundation/archethic-cli/tui"
 	"github.com/spf13/cobra"
+	"github.com/spf13/pflag"
 )
 
 var rootCmd = &cobra.Command{
 	Use:   "archethic-cli",
 	Short: "Archethic CLI",
-}
-
-var uiCmd = &cobra.Command{
-	Use:   "ui",
-	Short: "Terminal User Interface",
 	Run: func(cmd *cobra.Command, args []string) {
-		tui.StartTea()
+		// Check if any flags are passed
+		flagsPassed := false
+		cmd.Flags().Visit(func(f *pflag.Flag) {
+			flagsPassed = true
+		})
+
+		// If no flags are passed, start the TUI
+		if !flagsPassed {
+			tui.StartTea()
+		}
 	},
 }
 
@@ -36,10 +38,8 @@ func main() {
 	rootCmd.AddCommand(getKeychainCmd)
 	rootCmd.AddCommand(addServiceToKeychainCmd)
 	rootCmd.AddCommand(deleteServiceFromKeychainCmd)
-	rootCmd.AddCommand(uiCmd)
 
-	if err := rootCmd.Execute(); err != nil {
-		fmt.Println(err)
-		os.Exit(1)
-	}
+	err := rootCmd.Execute()
+	cobra.CheckErr(err)
+
 }

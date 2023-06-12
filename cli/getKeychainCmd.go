@@ -1,6 +1,7 @@
 package cli
 
 import (
+	"encoding/json"
 	"fmt"
 
 	"github.com/archethic-foundation/archethic-cli/tui/tuiutils"
@@ -14,14 +15,10 @@ func GetKeychainCmd() *cobra.Command {
 		Run: func(cmd *cobra.Command, args []string) {
 			accessSeed, _ := cmd.Flags().GetString("access-seed")
 			keychain, err := tuiutils.AccessKeychain(endpoint.String(), accessSeed)
-			if err != nil {
-				fmt.Println(err)
-				return
-			}
-			fmt.Println("Services name | Derivation path")
-			for k, service := range keychain.Services {
-				fmt.Printf("%s | %s\n", k, service.DerivationPath)
-			}
+			cobra.CheckErr(err)
+			jsonServices, err := json.Marshal(keychain.Services)
+			cobra.CheckErr(err)
+			fmt.Printf("%s\n", jsonServices)
 		},
 	}
 	getKeychainCmd.Flags().Var(&endpoint, "endpoint", "Endpoint (local|testnet|mainnet|[custom url])")
