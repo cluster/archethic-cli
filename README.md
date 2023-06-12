@@ -5,7 +5,7 @@ Archethic Command Line Interpreter
 # Doc Archethic TUI
 
 ## Main menu
-To launch the archetic with a TUI (terminal user interface), you need to pass the `--ui` flag.
+To launch the archetic-cli with a TUI (terminal user interface), you need to call the executable without any flag.
 When launching the Archethic TUI you will access to the main menu that allows you to select an action. 
 - Generate an address
 - Build and send a transaction
@@ -116,11 +116,11 @@ Send a transaction. It’s also possible to send a transaction for a specific se
 - `--config` (string) the path of the yaml configuration file (see below for the explanation of the parameters), if the config flag is passed, the other flags will be ignored for the configuration of the transaction
 - `--endpoint`  (local|testnet|mainnet|[custom url]) the endpoint to use, you can write your own URL. Default value is `local`.
 - `--access-seed`(string) the access seed
-- `--index` (integer) the index of the new transaction
+- `--index` (integer) the index of the new transaction. The default value is the last transaction index (which is fetched).
 - `--elliptic-curve` (ED25519|P256|SECP256K1) the elliptic curve. The default value is `ED25519`
 - `transaction-type`  (keychain_access|keychain|transfer|hosting|token|data|contract|code_proposal|code_approval) the transaction type. The default value is `transfer`.
-- `--uco-transfers` (destinationAddress(string)=amount(integer)) the UCO transfers. You can create several UCO transfers in a transaction by passing the `uco-transfers` flag several times. The amount passed will be multiplied by 10^8.
-- `--token-transfers`  (to(string)=amount(integer),token_address(string),token_id(integer)) the token transfers. You can create several token transfers in a transaction by passing the `token-transfers` flag several times. The amount passed will be multiplied by 10^8.
+- `--uco-transfer` (destinationAddress(string)=amount(integer)) the UCO transfers. You can create several UCO transfers in a transaction by passing the `uco-transfer` flag several times. The amount passed will be multiplied by 10^8.
+- `--token-transfer`  (to(string)=amount(integer),token_address(string),token_id(integer)) the token transfers. You can create several token transfers in a transaction by passing the `token-transfer` flag several times. The amount passed will be multiplied by 10^8.
 - `--recipients` (string) the recipients. You can create several recipients in a transaction by passing the `recipients` flag several times. 
 - `--ownerships` (secret(string)=authorization_key(string)) the ownerships. You can create several ownerships in a transaction by passing the `ownerships` flag several times. In the sent transaction, the ownerships will be grouped by `secret`.
 - `--content` (string) the path of the file containing the `content` of the transaction.

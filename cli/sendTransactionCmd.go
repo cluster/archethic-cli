@@ -22,7 +22,6 @@ func extractTransactionFromInputFile(config string) (ConfiguredTransaction, erro
 	var data SendTransactionData
 	err = yaml.Unmarshal(configBytes, &data)
 	if err != nil {
-		fmt.Println(err)
 		return ConfiguredTransaction{}, err
 	}
 	endpoint.Set(data.Endpoint)
@@ -49,7 +48,7 @@ func extractTransactionFromInputFlags(cmd *cobra.Command) (ConfiguredTransaction
 	recipients, _ := cmd.Flags().GetStringSlice("recipients")
 
 	// extract uco transfers
-	ucoTransfersStr, _ := cmd.Flags().GetStringToString("uco-transfers")
+	ucoTransfersStr, _ := cmd.Flags().GetStringToString("uco-transfer")
 	var ucoTransfers []UCOTransfer
 	for to, amount := range ucoTransfersStr {
 		toBytes, err := hex.DecodeString(to)
@@ -67,7 +66,7 @@ func extractTransactionFromInputFlags(cmd *cobra.Command) (ConfiguredTransaction
 	}
 
 	// extract token transfers
-	tokenTransfersStr, _ := cmd.Flags().GetStringToString("token-transfers")
+	tokenTransfersStr, _ := cmd.Flags().GetStringToString("token-transfer")
 	var tokenTransfers []TokenTransfer
 	for to, values := range tokenTransfersStr {
 		value := strings.Split(values, ",")
@@ -226,53 +225,39 @@ func GetSendTransactionCmd() *cobra.Command {
 			var err error
 			if config != "" {
 				configuredTransaction, err = extractTransactionFromInputFile(config)
-				if err != nil {
-					fmt.Println(err)
-					return
-				}
+				cobra.CheckErr(err)
 			} else {
 				configuredTransaction, err = extractTransactionFromInputFlags(cmd)
-				if err != nil {
-					fmt.Println(err)
-					return
-				}
-			}
-
-			client := archethic.NewAPIClient(endpoint.String())
-			storageNouncePublicKey, err := client.GetStorageNoncePublicKey()
-			if err != nil {
-				fmt.Println(err)
-				return
-			}
-
-			txType, err := transactionType.GetTransactionType()
-			if err != nil {
-				fmt.Println(err)
-				return
-			}
-
-			transaction, err := configureTransaction(configuredTransaction, txType, secretKey)
-			if err != nil {
-				fmt.Println(err)
-				return
+				cobra.CheckErr(err)
 			}
 
 			curve, err := ellipticCurve.GetCurve()
-			if err != nil {
-				fmt.Println(err)
-				return
-			}
+			cobra.CheckErr(err)
+
+			txType, err := transactionType.GetTransactionType()
+			cobra.CheckErr(err)
+
+			transaction, err := configureTransaction(configuredTransaction, txType, secretKey)
+			cobra.CheckErr(err)
 
 			serviceMode := configuredTransaction.serviceName != ""
 
-			fmt.Println("Sending transaction...")
-			feedback, err := tuiutils.SendTransaction(*transaction, secretKey, curve, serviceMode, endpoint.String(), configuredTransaction.index, configuredTransaction.serviceName, storageNouncePublicKey, configuredTransaction.accessSeed)
-			if err != nil {
-				fmt.Println(err)
-				return
-			} else {
-				fmt.Println(feedback)
+			client := archethic.NewAPIClient(endpoint.String())
+
+			// if no index is provided and not in serviceMode, get the last transaction index
+			if !cmd.Flags().Changed("index") && !serviceMode {
+				address, err := archethic.DeriveAddress([]byte(configuredTransaction.accessSeed), 0, curve, archethic.SHA256)
+				cobra.CheckErr(err)
+				addressHex := hex.EncodeToString(address)
+				configuredTransaction.index = client.GetLastTransactionIndex(addressHex)
 			}
+
+			storageNouncePublicKey, err := client.GetStorageNoncePublicKey()
+			cobra.CheckErr(err)
+
+			feedback, err := tuiutils.SendTransaction(*transaction, secretKey, curve, serviceMode, endpoint.String(), configuredTransaction.index, configuredTransaction.serviceName, storageNouncePublicKey, configuredTransaction.accessSeed)
+			cobra.CheckErr(err)
+			fmt.Println(feedback)
 		},
 	}
 	sendTransactionCmd.Flags().String("config", "", "The file location of the YAML configuration file")
@@ -281,8 +266,8 @@ func GetSendTransactionCmd() *cobra.Command {
 	sendTransactionCmd.Flags().Int("index", 0, "Index")
 	sendTransactionCmd.Flags().Var(&ellipticCurve, "elliptic-curve", "Elliptic Curve (ED25519|P256|SECP256K1)")
 	sendTransactionCmd.Flags().Var(&transactionType, "transaction-type", "Transaction Type (keychain_access|keychain|transfer|hosting|token|data|contract|code_proposal|code_approval)")
-	sendTransactionCmd.Flags().StringToString("uco-transfers", map[string]string{}, "UCO Transfers (format: to=amount)")
-	sendTransactionCmd.Flags().StringToString("token-transfers", map[string]string{}, "Token Transfers (format: to=amount,token_address,token_id)")
+	sendTransactionCmd.Flags().StringToString("uco-transfer", map[string]string{}, "UCO Transfers (format: to=amount)")
+	sendTransactionCmd.Flags().StringToString("token-transfer", map[string]string{}, "Token Transfers (format: to=amount,token_address,token_id)")
 	sendTransactionCmd.Flags().StringSlice("recipients", []string{}, "Recipients")
 	sendTransactionCmd.Flags().StringToString("ownerships", map[string]string{}, "Ownerships (format: secret=authorization_key)")
 	sendTransactionCmd.Flags().String("content", "", "The file location of the content")

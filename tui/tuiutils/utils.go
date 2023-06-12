@@ -236,7 +236,7 @@ func SendTransaction(transaction archethic.TransactionBuilder, secretKey []byte,
 
 	ts := archethic.NewTransactionSender(client)
 	ts.AddOnSent(func() {
-		feedback = "Transaction sent: " + endpoint + "/explorer/transaction/" + strings.ToUpper(hex.EncodeToString(transaction.Address))
+		feedback = endpoint + "/explorer/transaction/" + strings.ToUpper(hex.EncodeToString(transaction.Address))
 	})
 
 	ts.AddOnError(func(sender, message string) {

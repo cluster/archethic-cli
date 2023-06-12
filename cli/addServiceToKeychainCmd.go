@@ -17,19 +17,11 @@ func GetAddServiceToKeychainCmd() *cobra.Command {
 			serviceName, _ := cmd.Flags().GetString("service-name")
 			derivationPath, _ := cmd.Flags().GetString("derivation-path")
 
-			fmt.Println("Adding service to keychain...")
 			accessSeedBytes, err := archethic.MaybeConvertToHex(accessSeed)
-			if err != nil {
-				fmt.Println(err)
-				return
-			}
+			cobra.CheckErr(err)
 			feedback, err := tuiutils.AddServiceToKeychain(accessSeedBytes, endpoint.String(), serviceName, derivationPath)
-			if err != nil {
-				fmt.Println(err)
-				return
-			} else {
-				fmt.Println(feedback)
-			}
+			cobra.CheckErr(err)
+			fmt.Println(feedback)
 		},
 	}
 
