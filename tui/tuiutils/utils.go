@@ -1,14 +1,22 @@
 package tuiutils
 
 import (
+	"crypto/dsa"
+	"crypto/ecdsa"
 	"crypto/rand"
+	"crypto/rsa"
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"io/ioutil"
+	"log"
 	"reflect"
 	"strings"
+	"syscall"
 
 	archethic "github.com/archethic-foundation/libgo"
+	"golang.org/x/crypto/ssh"
+	"golang.org/x/crypto/ssh/terminal"
 )
 
 func GetHashAlgorithmName(h archethic.HashAlgo) string {
@@ -39,11 +47,7 @@ func GetCurveName(h archethic.Curve) string {
 	panic("Unknown curve")
 }
 
-func CreateKeychain(url, seed string) (string, string, string, string, error) {
-	accessSeed, err := archethic.MaybeConvertToHex(seed)
-	if err != nil {
-		return "", "", "", "", err
-	}
+func CreateKeychain(url string, accessSeed []byte) (string, string, string, string, error) {
 	originPrivateKey, _ := hex.DecodeString("01019280BDB84B8F8AEDBA205FE3552689964A5626EE2C60AA10E3BF22A91A036009")
 
 	publicKey, _, err := archethic.DeriveKeypair(accessSeed, 0, archethic.ED25519)
@@ -120,13 +124,9 @@ func CreateKeychain(url, seed string) (string, string, string, string, error) {
 	return feedback, keychainSeed, keychainTransactionAddress, keychainAccessTransactionAddress, error
 }
 
-func AccessKeychain(endpoint, seed string) (*archethic.Keychain, error) {
-	seedByte, err := archethic.MaybeConvertToHex(seed)
-	if err != nil {
-		return nil, err
-	}
+func AccessKeychain(endpoint string, seed []byte) (*archethic.Keychain, error) {
 	client := archethic.NewAPIClient(endpoint)
-	return archethic.GetKeychain(seedByte, *client)
+	return archethic.GetKeychain(seed, *client)
 }
 
 func AddServiceToKeychain(accessSeed []byte, endpoint string, serviceName string, serviceDerivationPath string) (string, error) {
@@ -179,12 +179,8 @@ func updateKeychain(accessSeed []byte, endpoint string, updateFunc func(*archeth
 	return returnedFeedback, returnedError
 }
 
-func SendTransaction(transaction archethic.TransactionBuilder, secretKey []byte, curve archethic.Curve, serviceMode bool, endpoint string, transactionIndex int, serviceName string, storageNouncePublicKey string, seedStr string) (string, error) {
+func SendTransaction(transaction archethic.TransactionBuilder, secretKey []byte, curve archethic.Curve, serviceMode bool, endpoint string, transactionIndex int, serviceName string, storageNouncePublicKey string, seed []byte) (string, error) {
 	feedback := ""
-	seed, err := archethic.MaybeConvertToHex(seedStr)
-	if err != nil {
-		return "", err
-	}
 	if len(transaction.Data.Code) > 0 {
 		ownershipIndex := -1
 		for i, ownership := range transaction.Data.Ownerships {
@@ -220,7 +216,7 @@ func SendTransaction(transaction archethic.TransactionBuilder, secretKey []byte,
 	client := archethic.NewAPIClient(endpoint)
 
 	if serviceMode {
-		err = buildKeychainTransaction(seed, client, transaction, serviceName)
+		err := buildKeychainTransaction(seed, client, &transaction, serviceName)
 		if err != nil {
 			return "", err
 		}
@@ -247,7 +243,7 @@ func SendTransaction(transaction archethic.TransactionBuilder, secretKey []byte,
 	return feedback, nil
 }
 
-func buildKeychainTransaction(seed []byte, client *archethic.APIClient, transaction archethic.TransactionBuilder, serviceName string) error {
+func buildKeychainTransaction(seed []byte, client *archethic.APIClient, transaction *archethic.TransactionBuilder, serviceName string) error {
 	keychain, err := archethic.GetKeychain(seed, *client)
 	if err != nil {
 		return err
@@ -262,9 +258,62 @@ func buildKeychainTransaction(seed []byte, client *archethic.APIClient, transact
 
 	index := client.GetLastTransactionIndex(hex.EncodeToString(genesisAddress))
 
-	err = keychain.BuildTransaction(&transaction, serviceName, uint8(index))
+	err = keychain.BuildTransaction(transaction, serviceName, uint8(index))
 	if err != nil {
 		return err
 	}
 	return nil
+}
+
+func GetSSHPrivateKey(privateKeyPath string) []byte {
+	var pvKeyBytes []byte
+	// Read the private key file
+	privateBytes, err := ioutil.ReadFile(privateKeyPath)
+	if err != nil {
+		log.Fatalf("Failed to load private key: %v", err)
+	}
+
+	pvKey, err := ssh.ParseRawPrivateKey(privateBytes)
+
+	if _, ok := err.(*ssh.PassphraseMissingError); ok {
+		passphrase := promptPassphrase()
+		pvKey, err = ssh.ParseRawPrivateKeyWithPassphrase(privateBytes, []byte(passphrase))
+		if err != nil {
+			log.Fatalf("Failed to parse private key: %v", err)
+		}
+	}
+
+	switch pvKey := pvKey.(type) {
+	case *rsa.PrivateKey:
+		pvKeyBytes = pvKey.D.Bytes()
+	case *ecdsa.PrivateKey:
+		pvKeyBytes = pvKey.D.Bytes()
+	case *dsa.PrivateKey:
+		pvKeyBytes = pvKey.X.Bytes()
+	default:
+		log.Fatalf("Only RSA, ECDSA and DSA keys are supported, got %T", pvKey)
+	}
+	return pvKeyBytes
+
+}
+
+func promptPassphrase() string {
+	fmt.Print("Enter passphrase: ")
+	passphrase, err := terminal.ReadPassword(int(syscall.Stdin))
+	if err != nil {
+		log.Fatalf("Failed to read passphrase: %v", err)
+	}
+	fmt.Println()
+	return string(passphrase)
+}
+
+func GetLastTransactionIndex(url string, curve archethic.Curve, seed []byte) (int, error) {
+	client := archethic.NewAPIClient(url)
+	address, err := archethic.DeriveAddress(seed, 0, curve, archethic.SHA256)
+	if err != nil {
+		return 0, err
+	}
+	addressHex := hex.EncodeToString(address)
+	index := client.GetLastTransactionIndex(addressHex)
+	return index, nil
 }

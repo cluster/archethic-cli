@@ -3,24 +3,20 @@ package main
 import (
 	"github.com/archethic-foundation/archethic-cli/cli"
 	"github.com/archethic-foundation/archethic-cli/tui"
+	"github.com/archethic-foundation/archethic-cli/tui/tuiutils"
 	"github.com/spf13/cobra"
-	"github.com/spf13/pflag"
 )
 
 var rootCmd = &cobra.Command{
 	Use:   "archethic-cli",
 	Short: "Archethic CLI",
 	Run: func(cmd *cobra.Command, args []string) {
-		// Check if any flags are passed
-		flagsPassed := false
-		cmd.Flags().Visit(func(f *pflag.Flag) {
-			flagsPassed = true
-		})
-
-		// If no flags are passed, start the TUI
-		if !flagsPassed {
-			tui.StartTea()
+		var privateKey []byte
+		if cmd.Flags().Changed("ssh") {
+			privateKeyPath, _ := cmd.Flags().GetString("ssh")
+			privateKey = tuiutils.GetSSHPrivateKey(privateKeyPath)
 		}
+		tui.StartTea(privateKey)
 	},
 }
 
@@ -38,6 +34,8 @@ func main() {
 	rootCmd.AddCommand(getKeychainCmd)
 	rootCmd.AddCommand(addServiceToKeychainCmd)
 	rootCmd.AddCommand(deleteServiceFromKeychainCmd)
+
+	rootCmd.Flags().String("ssh", "", "Path to ssh key")
 
 	err := rootCmd.Execute()
 	cobra.CheckErr(err)

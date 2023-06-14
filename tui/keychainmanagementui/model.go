@@ -74,9 +74,10 @@ type Model struct {
 	showSpinnerDeleteService         bool
 	showSpinnerCreateService         bool
 	Spinner                          spinner.Model
+	pvKeyBytes                       []byte
 }
 
-func New() Model {
+func New(pvKeyBytes []byte) Model {
 	s := spinner.New()
 	s.Spinner = spinner.Dot
 	s.Style = lipgloss.NewStyle().Foreground(lipgloss.Color("205"))
@@ -84,6 +85,7 @@ func New() Model {
 		inputs:           make([]textinput.Model, 2),
 		Spinner:          s,
 		newServiceInputs: make([]textinput.Model, 2),
+		pvKeyBytes:       pvKeyBytes,
 	}
 
 	var t textinput.Model
@@ -96,8 +98,12 @@ func New() Model {
 			t.Prompt = ""
 		case 1:
 			t.Prompt = "> Access seed\n"
-			t.EchoMode = textinput.EchoPassword
-			t.EchoCharacter = '•'
+			if pvKeyBytes != nil {
+				t.Placeholder = "(Imported SSH key)"
+			} else {
+				t.EchoMode = textinput.EchoPassword
+				t.EchoCharacter = '•'
+			}
 		}
 
 		m.inputs[i] = t
@@ -162,7 +168,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, tea.Quit
 
 		case "esc":
-			return New(), func() tea.Msg {
+			return New(m.pvKeyBytes), func() tea.Msg {
 				return BackMsg(true)
 			}
 
@@ -177,7 +183,12 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			// create keychain button
 			if m.focusIndex == len(m.inputs)+urlBlockSize {
 				m.feedback = ""
-				err := validateInput(m.inputs[0].Value(), m.inputs[1].Value())
+				accessSeed, err := getAccessKey(m)
+				if err != nil {
+					m.feedback = err.Error()
+					return m, nil
+				}
+				err = validateInput(m.inputs[0].Value(), accessSeed)
 				if err != nil {
 					m.feedback = err.Error()
 					return m, nil
@@ -218,6 +229,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 						ServiceName: m.serviceNames[m.selectedService],
 						Url:         m.inputs[0].Value(),
 						Seed:        m.inputs[1].Value(),
+						PvKeyBytes:  m.pvKeyBytes,
 					}
 				}
 			}
@@ -278,7 +290,12 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 }
 
 func addService(m *Model) Model {
-	addServiceToKeychain(m, []byte(m.inputs[1].Value()), m.inputs[0].Value(), m.newServiceInputs[0].Value(), m.newServiceInputs[1].Value())
+	accessSeed, err := getAccessKey(*m)
+	if err != nil {
+		m.feedback = err.Error()
+		return *m
+	}
+	addServiceToKeychain(m, accessSeed, m.inputs[0].Value(), m.newServiceInputs[0].Value(), m.newServiceInputs[1].Value())
 	m.newServiceInputs[0].SetValue("")
 	m.newServiceInputs[1].SetValue("")
 	m.focusIndex++
@@ -286,17 +303,28 @@ func addService(m *Model) Model {
 }
 
 func removeServiceAndRefresh(m *Model, selectedService int) Model {
-	removeServiceFromKeychain(m, []byte(m.inputs[1].Value()), m.inputs[0].Value(), m.serviceNames[selectedService])
-	return accessKeychain(m)
-}
-
-func accessKeychain(m *Model) Model {
-	err := validateInput(m.inputs[0].Value(), m.inputs[1].Value())
+	accessSeed, err := getAccessKey(*m)
 	if err != nil {
 		m.feedback = err.Error()
 		return *m
 	}
-	keychain, err := tuiutils.AccessKeychain(m.inputs[0].Value(), m.inputs[1].Value())
+	removeServiceFromKeychain(m, accessSeed, m.inputs[0].Value(), m.serviceNames[selectedService])
+	return accessKeychain(m)
+}
+
+func accessKeychain(m *Model) Model {
+	accessSeed, err := getAccessKey(*m)
+	if err != nil {
+		m.feedback = err.Error()
+		return *m
+	}
+	err = validateInput(m.inputs[0].Value(), accessSeed)
+	if err != nil {
+		m.feedback = err.Error()
+		return *m
+	}
+
+	keychain, err := tuiutils.AccessKeychain(m.inputs[0].Value(), accessSeed)
 	if err != nil {
 		m.feedback = err.Error()
 		return *m
@@ -311,11 +339,11 @@ func accessKeychain(m *Model) Model {
 	return *m
 }
 
-func validateInput(endoint, seed string) error {
+func validateInput(endoint string, seed []byte) error {
 	if endoint == "" {
 		return errors.New("please select a node endpoint")
 	}
-	if seed == "" {
+	if len(seed) == 0 {
 		return errors.New("please enter a seed")
 	}
 	return nil
@@ -325,6 +353,9 @@ func (m *Model) updateInputs(msg tea.Msg) []tea.Cmd {
 	cmds := make([]tea.Cmd, len(m.inputs)+len(m.newServiceInputs))
 
 	for i := range m.inputs {
+		if m.pvKeyBytes != nil && i == 1 {
+			continue
+		}
 		m.inputs[i], cmds[i] = m.inputs[i].Update(msg)
 	}
 
@@ -366,7 +397,12 @@ func (m *Model) updateFocus(urlBlockSize int) []tea.Cmd {
 }
 
 func createKeychain(m *Model) Model {
-	feedback, keychainSeed, keychainTransactionAddress, keychainAccessTransactionAddress, error := tuiutils.CreateKeychain(m.inputs[0].Value(), m.inputs[1].Value())
+	accessSeed, err := getAccessKey(*m)
+	if err != nil {
+		m.feedback = err.Error()
+		return *m
+	}
+	feedback, keychainSeed, keychainTransactionAddress, keychainAccessTransactionAddress, error := tuiutils.CreateKeychain(m.inputs[0].Value(), accessSeed)
 	if error != nil {
 		m.feedback = error.Error()
 	} else {
@@ -539,4 +575,12 @@ func urlView(m Model) string {
 	}
 
 	return s.String()
+}
+
+func getAccessKey(m Model) ([]byte, error) {
+	accessSeed, err := archethic.MaybeConvertToHex(m.inputs[1].Value())
+	if m.pvKeyBytes != nil {
+		accessSeed = m.pvKeyBytes
+	}
+	return accessSeed, err
 }

@@ -47,7 +47,7 @@ type Ownership struct {
 }
 
 type ConfiguredTransaction struct {
-	accessSeed     string
+	accessSeed     []byte
 	index          int
 	ucoTransfers   []UCOTransfer
 	tokenTransfers []TokenTransfer

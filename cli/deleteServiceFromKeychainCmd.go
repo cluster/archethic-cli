@@ -15,9 +15,16 @@ func GetDeleteServiceFromKeychainCmd() *cobra.Command {
 		Run: func(cmd *cobra.Command, args []string) {
 			accessSeed, _ := cmd.Flags().GetString("access-seed")
 			serviceName, _ := cmd.Flags().GetString("service-name")
+			privateKeyPath, _ := cmd.Flags().GetString("ssh")
 
-			accessSeedBytes, err := archethic.MaybeConvertToHex(accessSeed)
-			cobra.CheckErr(err)
+			var accessSeedBytes []byte
+			if privateKeyPath != "" {
+				accessSeedBytes = tuiutils.GetSSHPrivateKey(privateKeyPath)
+			} else {
+				var err error
+				accessSeedBytes, err = archethic.MaybeConvertToHex(accessSeed)
+				cobra.CheckErr(err)
+			}
 			feedback, err := tuiutils.RemoveServiceFromKeychain(accessSeedBytes, endpoint.String(), serviceName)
 			cobra.CheckErr(err)
 			fmt.Println(feedback)
@@ -26,5 +33,6 @@ func GetDeleteServiceFromKeychainCmd() *cobra.Command {
 	deleteServiceFromKeychainCmd.Flags().Var(&endpoint, "endpoint", "Endpoint (local|testnet|mainnet|[custom url])")
 	deleteServiceFromKeychainCmd.Flags().String("access-seed", "", "Access Seed")
 	deleteServiceFromKeychainCmd.Flags().String("service-name", "", "Service Name")
+	deleteServiceFromKeychainCmd.Flags().String("ssh", "", "Path to ssh key")
 	return deleteServiceFromKeychainCmd
 }
