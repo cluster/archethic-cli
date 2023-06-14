@@ -27,8 +27,12 @@ func extractTransactionFromInputFile(config string) (ConfiguredTransaction, erro
 	endpoint.Set(data.Endpoint)
 	ellipticCurve.Set(data.EllipticCurve)
 	transactionType.Set(data.TransactionType)
+	seedByte, err := archethic.MaybeConvertToHex(data.AccessSeed)
+	if err != nil {
+		return ConfiguredTransaction{}, err
+	}
 	return ConfiguredTransaction{
-		accessSeed:     data.AccessSeed,
+		accessSeed:     seedByte,
 		index:          data.Index,
 		ucoTransfers:   data.UcoTransfers,
 		tokenTransfers: data.TokenTransfers,
@@ -119,8 +123,19 @@ func extractTransactionFromInputFlags(cmd *cobra.Command) (ConfiguredTransaction
 		smartContractStr = string(smartContractBytes)
 	}
 
+	privateKeyPath, _ := cmd.Flags().GetString("ssh")
+
+	var accessSeedBytes []byte
+	if privateKeyPath != "" {
+		accessSeedBytes = tuiutils.GetSSHPrivateKey(privateKeyPath)
+	} else {
+		var err error
+		accessSeedBytes, err = archethic.MaybeConvertToHex(accessSeed)
+		cobra.CheckErr(err)
+	}
+
 	return ConfiguredTransaction{
-		accessSeed:     accessSeed,
+		accessSeed:     accessSeedBytes,
 		index:          index,
 		ucoTransfers:   ucoTransfers,
 		tokenTransfers: tokenTransfers,
@@ -246,10 +261,8 @@ func GetSendTransactionCmd() *cobra.Command {
 
 			// if no index is provided and not in serviceMode, get the last transaction index
 			if !cmd.Flags().Changed("index") && !serviceMode {
-				address, err := archethic.DeriveAddress([]byte(configuredTransaction.accessSeed), 0, curve, archethic.SHA256)
+				configuredTransaction.index, err = tuiutils.GetLastTransactionIndex(endpoint.String(), curve, configuredTransaction.accessSeed)
 				cobra.CheckErr(err)
-				addressHex := hex.EncodeToString(address)
-				configuredTransaction.index = client.GetLastTransactionIndex(addressHex)
 			}
 
 			storageNouncePublicKey, err := client.GetStorageNoncePublicKey()
@@ -263,6 +276,7 @@ func GetSendTransactionCmd() *cobra.Command {
 	sendTransactionCmd.Flags().String("config", "", "The file location of the YAML configuration file")
 	sendTransactionCmd.Flags().Var(&endpoint, "endpoint", "Endpoint (local|testnet|mainnet|[custom url])")
 	sendTransactionCmd.Flags().String("access-seed", "", "Access Seed")
+	sendTransactionCmd.Flags().String("ssh", "", "Path to ssh key")
 	sendTransactionCmd.Flags().Int("index", 0, "Index")
 	sendTransactionCmd.Flags().Var(&ellipticCurve, "elliptic-curve", "Elliptic Curve (ED25519|P256|SECP256K1)")
 	sendTransactionCmd.Flags().Var(&transactionType, "transaction-type", "Transaction Type (keychain_access|keychain|transfer|hosting|token|data|contract|code_proposal|code_approval)")

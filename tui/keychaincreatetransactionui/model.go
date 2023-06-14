@@ -22,6 +22,7 @@ type CreateTransactionMsg struct {
 	ServiceName string
 	Seed        string
 	Url         string
+	PvKeyBytes  []byte
 }
 
 type TransactionSent struct {
@@ -91,9 +92,10 @@ type Model struct {
 	showSpinner            bool
 	Spinner                spinner.Model
 	IsInit                 bool
+	pvKeyBytes             []byte
 }
 
-func New() Model {
+func New(pvKeyBytes []byte) Model {
 	s := spinner.New()
 	s.Spinner = spinner.Dot
 	s.Style = lipgloss.NewStyle().Foreground(lipgloss.Color("205"))
@@ -104,16 +106,17 @@ func New() Model {
 		transaction: *archethic.NewTransaction(archethic.KeychainAccessType),
 		secretKey:   key,
 		Spinner:     s,
+		pvKeyBytes:  pvKeyBytes,
 	}
 
 	m.Tabs = []string{"Main", "UCO Transfers", "Token Transfers", "Recipients", "Ownerships", "Content", "Smart Contract"}
-	m.resetInterface()
+	m.resetInterface(pvKeyBytes)
 	return m
 }
 
-func (m *Model) resetInterface() {
+func (m *Model) resetInterface(pvKeyBytes []byte) {
 	m.transaction = *archethic.NewTransaction(archethic.KeychainAccessType)
-	m.mainModel = NewMainModel()
+	m.mainModel = NewMainModel(pvKeyBytes)
 	m.ucoTransferModel = NewUcoTransferModel(&m.transaction)
 	m.tokenTransferModel = NewTokenTransferModel(&m.transaction)
 	m.recipientsModel = NewRecipientsModel(&m.transaction)
@@ -187,7 +190,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return sendTransaction(&m, msg.Curve, msg.Seed)
 		}
 	case ResetInterface:
-		m.resetInterface()
+		m.resetInterface(m.pvKeyBytes)
 	case AddUcoTransfer:
 		m.transaction.AddUcoTransfer(msg.To, msg.Amount)
 		m.ucoTransferModel.transaction = &m.transaction
@@ -242,7 +245,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.contentModel = w.(ContentModel)
 				return m, cmds
 			} else {
-				return New(), func() tea.Msg {
+				return New(m.pvKeyBytes), func() tea.Msg {
 					return BackMsg(true)
 				}
 			}
@@ -449,9 +452,9 @@ func min(a, b int) int {
 	return b
 }
 
-func sendTransaction(m *Model, curve archethic.Curve, seedStr string) TransactionSent {
+func sendTransaction(m *Model, curve archethic.Curve, seed []byte) TransactionSent {
 	m.feedback = ""
-	feedback, error := tuiutils.SendTransaction(m.transaction, m.secretKey, curve, m.serviceMode, m.url, m.transactionIndex, m.serviceName, m.storageNouncePublicKey, seedStr)
+	feedback, error := tuiutils.SendTransaction(m.transaction, m.secretKey, curve, m.serviceMode, m.url, m.transactionIndex, m.serviceName, m.storageNouncePublicKey, seed)
 	m.feedback = fmt.Sprintf("Transaction sent: %s", feedback)
 	if error != nil {
 		return TransactionSent{Model: *m, Error: error}

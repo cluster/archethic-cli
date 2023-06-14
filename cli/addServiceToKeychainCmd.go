@@ -16,9 +16,19 @@ func GetAddServiceToKeychainCmd() *cobra.Command {
 			accessSeed, _ := cmd.Flags().GetString("access-seed")
 			serviceName, _ := cmd.Flags().GetString("service-name")
 			derivationPath, _ := cmd.Flags().GetString("derivation-path")
+			privateKeyPath, _ := cmd.Flags().GetString("ssh")
+			var accessSeedBytes []byte
+			if privateKeyPath != "" {
+				accessSeedBytes = tuiutils.GetSSHPrivateKey(privateKeyPath)
+			} else {
+				var err error
+				accessSeedBytes, err = archethic.MaybeConvertToHex(accessSeed)
+				if err != nil {
+					fmt.Println(err)
+					return
+				}
+			}
 
-			accessSeedBytes, err := archethic.MaybeConvertToHex(accessSeed)
-			cobra.CheckErr(err)
 			feedback, err := tuiutils.AddServiceToKeychain(accessSeedBytes, endpoint.String(), serviceName, derivationPath)
 			cobra.CheckErr(err)
 			fmt.Println(feedback)
@@ -29,5 +39,6 @@ func GetAddServiceToKeychainCmd() *cobra.Command {
 	addServiceToKeychainCmd.Flags().String("access-seed", "", "Access Seed")
 	addServiceToKeychainCmd.Flags().String("service-name", "", "Service Name")
 	addServiceToKeychainCmd.Flags().String("derivation-path", "", "Derivation Path")
+	addServiceToKeychainCmd.Flags().String("ssh", "", "Path to ssh key")
 	return addServiceToKeychainCmd
 }
