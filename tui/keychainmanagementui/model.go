@@ -564,7 +564,9 @@ func (m Model) View() string {
 			} else {
 				u = "( ) "
 			}
-			u += k + " : " + m.keychain.Services[k].DerivationPath + "\n"
+
+			keychainDerivedAddress, _ := m.keychain.DeriveAddress(k, 0)
+			u += k + " : " + m.keychain.Services[k].DerivationPath + " (" + hex.EncodeToString(keychainDerivedAddress) + ")\n"
 			if m.focusIndex == i+len(m.inputs)+6 {
 				b2.WriteString(focusedStyle.Render(u))
 			} else {
