@@ -10,7 +10,7 @@ import (
 var (
 	hashAlgo        = SHA256
 	ellipticCurve   = ED25519
-	endpoint        = local
+	endpoint        = mainnet
 	transactionType = TransferType
 )
 

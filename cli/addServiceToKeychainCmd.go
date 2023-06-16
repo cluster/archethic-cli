@@ -17,6 +17,11 @@ func GetAddServiceToKeychainCmd() *cobra.Command {
 			serviceName, _ := cmd.Flags().GetString("service-name")
 			derivationPath, _ := cmd.Flags().GetString("derivation-path")
 
+			// set default derivation path if not set
+			if !cmd.Flag("derivation-path").Changed {
+				derivationPath = "m/650'/" + serviceName + "/0"
+			}
+
 			accessSeedBytes, err := archethic.MaybeConvertToHex(accessSeed)
 			cobra.CheckErr(err)
 			feedback, err := tuiutils.AddServiceToKeychain(accessSeedBytes, endpoint.String(), serviceName, derivationPath)
