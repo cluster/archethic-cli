@@ -3,6 +3,7 @@ package tuiutils
 import (
 	"crypto/dsa"
 	"crypto/ecdsa"
+	"crypto/ed25519"
 	"crypto/rand"
 	"crypto/rsa"
 	"encoding/hex"
@@ -292,6 +293,8 @@ func GetSSHPrivateKey(privateKeyPath string) ([]byte, error) {
 		pvKeyBytes = pvKey.D.Bytes()
 	case *dsa.PrivateKey:
 		pvKeyBytes = pvKey.X.Bytes()
+	case *ed25519.PrivateKey:
+		pvKeyBytes = *pvKey
 	default:
 		return nil, errors.New("Only RSA, ECDSA and DSA keys are supported, got " + reflect.TypeOf(pvKey).String())
 	}
