@@ -36,7 +36,7 @@ type MainModel struct {
 }
 
 // StartTea the entry point for the UI. Initializes the model.
-func StartTea() {
+func StartTea(pvKeyBytes []byte) {
 	if f, err := tea.LogToFile("debug.log", "help"); err != nil {
 		fmt.Println("Couldn't open a file for logging:", err)
 		os.Exit(1)
@@ -49,7 +49,7 @@ func StartTea() {
 		}()
 	}
 
-	m := New()
+	m := New(pvKeyBytes)
 	p = tea.NewProgram(m, tea.WithAltScreen())
 	if err := p.Start(); err != nil {
 		fmt.Println("Error running program:", err)
@@ -58,13 +58,13 @@ func StartTea() {
 }
 
 // New initialize the main model for your program
-func New() MainModel {
+func New(pvKeyBytes []byte) MainModel {
 	return MainModel{
 		state:                     sessionState(0),
 		main:                      mainui.New(),
 		generateAddress:           generateaddressui.New(),
-		keychainManagement:        keychainmanagementui.New(),
-		keychainCreateTransaction: keychaincreatetransactionui.New(),
+		keychainManagement:        keychainmanagementui.New(pvKeyBytes),
+		keychainCreateTransaction: keychaincreatetransactionui.New(pvKeyBytes),
 	}
 }
 

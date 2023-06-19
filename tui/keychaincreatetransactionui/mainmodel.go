@@ -1,7 +1,6 @@
 package keychaincreatetransactionui
 
 import (
-	"encoding/hex"
 	"fmt"
 	"strconv"
 	"strings"
@@ -51,6 +50,7 @@ type MainModel struct {
 	selectedTransactionType string
 	focusInput              int
 	feedback                string
+	pvKeyBytes              []byte
 }
 
 type UpdateTransactionIndex struct {
@@ -70,14 +70,15 @@ type UpdateTransactionType struct {
 
 type SendTransaction struct {
 	Curve archethic.Curve
-	Seed  string
+	Seed  []byte
 }
 type ResetInterface struct{}
 
-func NewMainModel() MainModel {
+func NewMainModel(pvKeyBytes []byte) MainModel {
 
 	m := MainModel{
 		mainInputs: make([]textinput.Model, 5),
+		pvKeyBytes: pvKeyBytes,
 	}
 
 	for i := range m.mainInputs {
@@ -88,8 +89,12 @@ func NewMainModel() MainModel {
 			t.Prompt = ""
 		case 1:
 			t.Prompt = "> Access seed\n"
-			t.EchoMode = textinput.EchoPassword
-			t.EchoCharacter = '•'
+			if pvKeyBytes != nil {
+				t.Placeholder = "(Imported SSH key)"
+			} else {
+				t.EchoMode = textinput.EchoPassword
+				t.EchoCharacter = '•'
+			}
 		case 2:
 			t.Prompt = "> Elliptic curve\n"
 			t.Placeholder = "(default 0)"
@@ -130,19 +135,23 @@ func (m MainModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			updateMainFocusInput(&m, keypress)
 			// if the seed or the curve are blured, they are probably updated, so update the transaction index
 			if previousFocus == SEED_INDEX || previousFocus == CURVE_INDEX {
-				client := archethic.NewAPIClient(m.mainInputs[0].Value())
-				seed, err := archethic.MaybeConvertToHex(m.mainInputs[1].Value())
+				var seed []byte
+				if m.pvKeyBytes != nil {
+					seed = m.pvKeyBytes
+				} else {
+					var err error
+					seed, err = archethic.MaybeConvertToHex(m.mainInputs[1].Value())
+					if err != nil {
+						m.feedback = err.Error()
+						return m, nil
+					}
+				}
+
+				index, err := tuiutils.GetLastTransactionIndex(m.mainInputs[0].Value(), getCurve(&m), seed)
 				if err != nil {
 					m.feedback = err.Error()
 					return m, nil
 				}
-				address, err := archethic.DeriveAddress(seed, 0, getCurve(&m), archethic.SHA256)
-				if err != nil {
-					m.feedback = err.Error()
-					return m, nil
-				}
-				addressHex := hex.EncodeToString(address)
-				index := client.GetLastTransactionIndex(addressHex)
 				m.mainInputs[3].SetValue(fmt.Sprint(index))
 				m, cmds := updateMainFocus(m)
 				cmds = append(cmds, m.updateMainInputs(msg)...)
@@ -172,7 +181,18 @@ func (m MainModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				}
 			} else if m.focusInput == MAIN_ADD_BUTTON_INDEX {
 				return m, func() tea.Msg {
-					return SendTransaction{Curve: getCurve(&m), Seed: m.mainInputs[1].Value()}
+					var seed []byte
+					if m.pvKeyBytes != nil {
+						seed = m.pvKeyBytes
+					} else {
+						var err error
+						seed, err = archethic.MaybeConvertToHex(m.mainInputs[1].Value())
+						if err != nil {
+							m.feedback = err.Error()
+							return m
+						}
+					}
+					return SendTransaction{Curve: getCurve(&m), Seed: seed}
 				}
 			} else if m.focusInput == MAIN_RESET_BUTTON_INDEX {
 				return m, func() tea.Msg {

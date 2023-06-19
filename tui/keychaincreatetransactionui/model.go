@@ -2,13 +2,12 @@ package keychaincreatetransactionui
 
 import (
 	"crypto/rand"
-	"encoding/hex"
 	"errors"
 	"fmt"
-	"reflect"
 	"strconv"
 	"strings"
 
+	"github.com/archethic-foundation/archethic-cli/tui/tuiutils"
 	archethic "github.com/archethic-foundation/libgo"
 	"github.com/charmbracelet/bubbles/spinner"
 	tea "github.com/charmbracelet/bubbletea"
@@ -23,6 +22,7 @@ type CreateTransactionMsg struct {
 	ServiceName string
 	Seed        string
 	Url         string
+	PvKeyBytes  []byte
 }
 
 type TransactionSent struct {
@@ -92,9 +92,10 @@ type Model struct {
 	showSpinner            bool
 	Spinner                spinner.Model
 	IsInit                 bool
+	pvKeyBytes             []byte
 }
 
-func New() Model {
+func New(pvKeyBytes []byte) Model {
 	s := spinner.New()
 	s.Spinner = spinner.Dot
 	s.Style = lipgloss.NewStyle().Foreground(lipgloss.Color("205"))
@@ -105,16 +106,17 @@ func New() Model {
 		transaction: *archethic.NewTransaction(archethic.KeychainAccessType),
 		secretKey:   key,
 		Spinner:     s,
+		pvKeyBytes:  pvKeyBytes,
 	}
 
 	m.Tabs = []string{"Main", "UCO Transfers", "Token Transfers", "Recipients", "Ownerships", "Content", "Smart Contract"}
-	m.resetInterface()
+	m.resetInterface(pvKeyBytes)
 	return m
 }
 
-func (m *Model) resetInterface() {
+func (m *Model) resetInterface(pvKeyBytes []byte) {
 	m.transaction = *archethic.NewTransaction(archethic.KeychainAccessType)
-	m.mainModel = NewMainModel()
+	m.mainModel = NewMainModel(pvKeyBytes)
 	m.ucoTransferModel = NewUcoTransferModel(&m.transaction)
 	m.tokenTransferModel = NewTokenTransferModel(&m.transaction)
 	m.recipientsModel = NewRecipientsModel(&m.transaction)
@@ -188,7 +190,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return sendTransaction(&m, msg.Curve, msg.Seed)
 		}
 	case ResetInterface:
-		m.resetInterface()
+		m.resetInterface(m.pvKeyBytes)
 	case AddUcoTransfer:
 		m.transaction.AddUcoTransfer(msg.To, msg.Amount)
 		m.ucoTransferModel.transaction = &m.transaction
@@ -243,7 +245,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.contentModel = w.(ContentModel)
 				return m, cmds
 			} else {
-				return New(), func() tea.Msg {
+				return New(m.pvKeyBytes), func() tea.Msg {
 					return BackMsg(true)
 				}
 			}
@@ -450,89 +452,12 @@ func min(a, b int) int {
 	return b
 }
 
-func sendTransaction(m *Model, curve archethic.Curve, seedStr string) TransactionSent {
+func sendTransaction(m *Model, curve archethic.Curve, seed []byte) TransactionSent {
 	m.feedback = ""
-	seed, err := archethic.MaybeConvertToHex(seedStr)
-	if err != nil {
-		return TransactionSent{Model: *m, Error: err}
+	feedback, error := tuiutils.SendTransaction(m.transaction, m.secretKey, curve, m.serviceMode, m.url, m.transactionIndex, m.serviceName, m.storageNouncePublicKey, seed)
+	m.feedback = fmt.Sprintf("Transaction sent: %s", feedback)
+	if error != nil {
+		return TransactionSent{Model: *m, Error: error}
 	}
-	if len(m.transaction.Data.Code) > 0 {
-		ownershipIndex := -1
-		for i, ownership := range m.transaction.Data.Ownerships {
-			decryptSecret, err := archethic.AesDecrypt(ownership.Secret, m.secretKey)
-			if err != nil {
-				return TransactionSent{Model: *m, Error: err}
-			}
-			decodedSecret := string(decryptSecret)
-
-			if reflect.DeepEqual(decodedSecret, string(seed)) {
-				ownershipIndex = i
-				break
-			}
-		}
-
-		if ownershipIndex == -1 {
-			return TransactionSent{Model: *m, Error: errors.New("you need to create an ownership with the transaction seed as secret and authorize node public key to let nodes generate new transaction from your smart contract")}
-		} else {
-			authorizedKeyIndex := -1
-			for i, authKey := range m.transaction.Data.Ownerships[ownershipIndex].AuthorizedKeys {
-				if reflect.DeepEqual(strings.ToUpper(hex.EncodeToString(authKey.PublicKey)), m.storageNouncePublicKey) {
-					authorizedKeyIndex = i
-					break
-				}
-			}
-
-			if authorizedKeyIndex == -1 {
-				return TransactionSent{Model: *m, Error: errors.New("you need to create an ownership with the transaction seed as secret and authorize node public key to let nodes generate new transaction from your smart contract")}
-			}
-		}
-	}
-
-	client := archethic.NewAPIClient(m.url)
-
-	if m.serviceMode {
-		err = buildKeychainTransaction(seed, client, m)
-		if err != nil {
-			return TransactionSent{Model: *m, Error: err}
-		}
-	} else {
-		m.transaction.Build(seed, uint32(m.transactionIndex), curve, archethic.SHA256)
-
-	}
-	originPrivateKey, _ := hex.DecodeString("01019280BDB84B8F8AEDBA205FE3552689964A5626EE2C60AA10E3BF22A91A036009")
-	m.transaction.OriginSign(originPrivateKey)
-
-	ts := archethic.NewTransactionSender(client)
-	ts.AddOnSent(func() {
-		m.feedback = "Transaction sent: " + m.url + "/explorer/transaction/" + strings.ToUpper(hex.EncodeToString(m.transaction.Address))
-	})
-
-	ts.AddOnError(func(sender, message string) {
-		m.feedback = "Transaction error: " + message
-	})
-
-	ts.SendTransaction(&m.transaction, 100, 60)
 	return TransactionSent{Model: *m, Error: nil}
-}
-
-func buildKeychainTransaction(seed []byte, client *archethic.APIClient, m *Model) error {
-	keychain, err := archethic.GetKeychain(seed, *client)
-	if err != nil {
-		return err
-	}
-
-	m.transaction.Version = uint32(keychain.Version)
-
-	genesisAddress, err := keychain.DeriveAddress(m.serviceName, 0)
-	if err != nil {
-		return err
-	}
-
-	index := client.GetLastTransactionIndex(hex.EncodeToString(genesisAddress))
-
-	err = keychain.BuildTransaction(&m.transaction, m.serviceName, uint8(index))
-	if err != nil {
-		return err
-	}
-	return nil
 }

@@ -1,14 +1,13 @@
 package keychainmanagementui
 
 import (
-	"crypto/rand"
-	"encoding/hex"
 	"errors"
 	"fmt"
 	"sort"
 	"strings"
 
 	"github.com/archethic-foundation/archethic-cli/tui/keychaincreatetransactionui"
+	"github.com/archethic-foundation/archethic-cli/tui/tuiutils"
 	archethic "github.com/archethic-foundation/libgo"
 	"github.com/charmbracelet/bubbles/spinner"
 	"github.com/charmbracelet/bubbles/textinput"
@@ -75,9 +74,10 @@ type Model struct {
 	showSpinnerDeleteService         bool
 	showSpinnerCreateService         bool
 	Spinner                          spinner.Model
+	pvKeyBytes                       []byte
 }
 
-func New() Model {
+func New(pvKeyBytes []byte) Model {
 	s := spinner.New()
 	s.Spinner = spinner.Dot
 	s.Style = lipgloss.NewStyle().Foreground(lipgloss.Color("205"))
@@ -85,6 +85,7 @@ func New() Model {
 		inputs:           make([]textinput.Model, 2),
 		Spinner:          s,
 		newServiceInputs: make([]textinput.Model, 2),
+		pvKeyBytes:       pvKeyBytes,
 	}
 
 	var t textinput.Model
@@ -97,8 +98,12 @@ func New() Model {
 			t.Prompt = ""
 		case 1:
 			t.Prompt = "> Access seed\n"
-			t.EchoMode = textinput.EchoPassword
-			t.EchoCharacter = '•'
+			if pvKeyBytes != nil {
+				t.Placeholder = "(Imported SSH key)"
+			} else {
+				t.EchoMode = textinput.EchoPassword
+				t.EchoCharacter = '•'
+			}
 		}
 
 		m.inputs[i] = t
@@ -163,7 +168,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, tea.Quit
 
 		case "esc":
-			return New(), func() tea.Msg {
+			return New(m.pvKeyBytes), func() tea.Msg {
 				return BackMsg(true)
 			}
 
@@ -178,17 +183,17 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			// create keychain button
 			if m.focusIndex == len(m.inputs)+urlBlockSize {
 				m.feedback = ""
-				err := validateInput(m)
+				accessSeed, err := getAccessKey(m)
+				if err != nil {
+					m.feedback = err.Error()
+					return m, nil
+				}
+				err = validateInput(m.inputs[0].Value(), accessSeed)
 				if err != nil {
 					m.feedback = err.Error()
 					return m, nil
 				}
 				m.showSpinnerCreate = true
-				err = validateInput(m)
-				if err != nil {
-					m.feedback = err.Error()
-					return m, nil
-				}
 				return m, func() tea.Msg {
 					return SendNewKeychainTransaction{createKeychain(&m)}
 				}
@@ -224,6 +229,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 						ServiceName: m.serviceNames[m.selectedService],
 						Url:         m.inputs[0].Value(),
 						Seed:        m.inputs[1].Value(),
+						PvKeyBytes:  m.pvKeyBytes,
 					}
 				}
 			}
@@ -284,7 +290,12 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 }
 
 func addService(m *Model) Model {
-	addServiceToKeychain(m, []byte(m.inputs[1].Value()), *archethic.NewAPIClient(m.inputs[0].Value()), m.newServiceInputs[0].Value(), m.newServiceInputs[1].Value())
+	accessSeed, err := getAccessKey(*m)
+	if err != nil {
+		m.feedback = err.Error()
+		return *m
+	}
+	addServiceToKeychain(m, accessSeed, m.inputs[0].Value(), m.newServiceInputs[0].Value(), m.newServiceInputs[1].Value())
 	m.newServiceInputs[0].SetValue("")
 	m.newServiceInputs[1].SetValue("")
 	m.focusIndex++
@@ -292,29 +303,33 @@ func addService(m *Model) Model {
 }
 
 func removeServiceAndRefresh(m *Model, selectedService int) Model {
-	removeServiceFromKeychain(m, []byte(m.inputs[1].Value()), *archethic.NewAPIClient(m.inputs[0].Value()), m.serviceNames[selectedService])
+	accessSeed, err := getAccessKey(*m)
+	if err != nil {
+		m.feedback = err.Error()
+		return *m
+	}
+	removeServiceFromKeychain(m, accessSeed, m.inputs[0].Value(), m.serviceNames[selectedService])
 	return accessKeychain(m)
 }
 
 func accessKeychain(m *Model) Model {
-	err := validateInput(*m)
-	m.feedback = ""
+	accessSeed, err := getAccessKey(*m)
 	if err != nil {
 		m.feedback = err.Error()
 		return *m
 	}
-	url := m.inputs[0].Value()
-	seed, err := archethic.MaybeConvertToHex(m.inputs[1].Value())
+	err = validateInput(m.inputs[0].Value(), accessSeed)
 	if err != nil {
 		m.feedback = err.Error()
 		return *m
 	}
-	client := archethic.NewAPIClient(url)
-	m.keychain, err = archethic.GetKeychain(seed, *client)
+
+	keychain, err := tuiutils.AccessKeychain(m.inputs[0].Value(), accessSeed)
 	if err != nil {
 		m.feedback = err.Error()
 		return *m
 	}
+	m.keychain = keychain
 	m.serviceNames = make([]string, 0, len(m.keychain.Services))
 	for k := range m.keychain.Services {
 		m.serviceNames = append(m.serviceNames, k)
@@ -324,11 +339,11 @@ func accessKeychain(m *Model) Model {
 	return *m
 }
 
-func validateInput(m Model) error {
-	if m.inputs[0].Value() == "" {
+func validateInput(endoint string, seed []byte) error {
+	if endoint == "" {
 		return errors.New("please select a node endpoint")
 	}
-	if m.inputs[1].Value() == "" {
+	if len(seed) == 0 {
 		return errors.New("please enter a seed")
 	}
 	return nil
@@ -338,6 +353,9 @@ func (m *Model) updateInputs(msg tea.Msg) []tea.Cmd {
 	cmds := make([]tea.Cmd, len(m.inputs)+len(m.newServiceInputs))
 
 	for i := range m.inputs {
+		if m.pvKeyBytes != nil && i == 1 {
+			continue
+		}
 		m.inputs[i], cmds[i] = m.inputs[i].Update(msg)
 	}
 
@@ -379,131 +397,39 @@ func (m *Model) updateFocus(urlBlockSize int) []tea.Cmd {
 }
 
 func createKeychain(m *Model) Model {
-	url := m.inputs[0].Value()
-	accessSeed, err := archethic.MaybeConvertToHex(m.inputs[1].Value())
+	accessSeed, err := getAccessKey(*m)
 	if err != nil {
 		m.feedback = err.Error()
 		return *m
 	}
-	originPrivateKey, _ := hex.DecodeString("01019280BDB84B8F8AEDBA205FE3552689964A5626EE2C60AA10E3BF22A91A036009")
-
-	publicKey, _, err := archethic.DeriveKeypair(accessSeed, 0, archethic.ED25519)
-	if err != nil {
-		m.feedback = err.Error()
-		return *m
+	feedback, keychainSeed, keychainTransactionAddress, keychainAccessTransactionAddress, error := tuiutils.CreateKeychain(m.inputs[0].Value(), accessSeed)
+	if error != nil {
+		m.feedback = error.Error()
+	} else {
+		m.feedback = feedback
 	}
-
-	randomSeed := make([]byte, 32)
-	rand.Read(randomSeed)
-
-	keychain := archethic.NewKeychain(randomSeed)
-	keychain.AddService("uco", "m/650'/0/0", archethic.ED25519, archethic.SHA256)
-	keychain.AddAuthorizedPublicKey(publicKey)
-
-	accessAddress, err := archethic.DeriveAddress(accessSeed, 1, archethic.ED25519, archethic.SHA256)
-	if err != nil {
-		m.feedback = err.Error()
-		return *m
-	}
-	keychainAddress, err := archethic.DeriveAddress(randomSeed, 1, archethic.ED25519, archethic.SHA256)
-	if err != nil {
-		m.feedback = err.Error()
-		return *m
-	}
-
-	keychainTx, err := archethic.NewKeychainTransaction(keychain, 0)
-	if err != nil {
-		m.feedback = err.Error()
-		return *m
-	}
-	keychainTx.OriginSign(originPrivateKey)
-
-	client := archethic.NewAPIClient(url)
-	accessKeychain, _ := archethic.GetKeychain(accessSeed, *client)
-	if accessKeychain != nil {
-		m.feedback = "Keychain access already exists"
-		return *m
-	}
-
-	ts := archethic.NewTransactionSender(client)
-	ts.AddOnRequiredConfirmation(func(nbConf int) {
-		m.feedback += "\nKeychain's transaction confirmed."
-
-		m.keychainSeed = hex.EncodeToString(randomSeed)
-		m.keychainTransactionAddress = fmt.Sprintf("%s/explorer/transaction/%x", url, keychainAddress)
-
-		accessTx, err := archethic.NewAccessTransaction(accessSeed, keychainAddress)
-		if err != nil {
-			m.feedback = err.Error()
-		}
-		accessTx.OriginSign(originPrivateKey)
-		ts2 := archethic.NewTransactionSender(client)
-		ts2.AddOnRequiredConfirmation(func(nbConf int) {
-			m.feedback += "\nKeychain access transaction confirmed."
-			ts2.Unsubscribe("confirmation")
-			m.keychainAccessTransactionAddress = fmt.Sprintf("%s/explorer/transaction/%x", url, accessAddress)
-		})
-		ts2.AddOnError(func(senderContext, message string) {
-			m.feedback += fmt.Sprintf("\nAccess transaction error: %s", message)
-			ts.Unsubscribe("error")
-		})
-		ts2.SendTransaction(accessTx, 100, 60)
-		ts.Unsubscribe("confirmation")
-	})
-	ts.AddOnError(func(senderContext, message string) {
-		m.feedback += fmt.Sprintf("Keychain transaction error: %s", message)
-		ts.Unsubscribe("error")
-	})
-	ts.SendTransaction(keychainTx, 100, 60)
+	m.keychainSeed = keychainSeed
+	m.keychainTransactionAddress = keychainTransactionAddress
+	m.keychainAccessTransactionAddress = keychainAccessTransactionAddress
 	return *m
 }
 
-func addServiceToKeychain(m *Model, accessSeed []byte, client archethic.APIClient, serviceName string, serviceDerivationPath string) {
-	updateKeychain(m, accessSeed, client, func(keychain *archethic.Keychain) {
-		keychain.AddService(serviceName, serviceDerivationPath, archethic.ED25519, archethic.SHA256)
-	})
+func addServiceToKeychain(m *Model, accessSeed []byte, endpoint string, serviceName string, serviceDerivationPath string) {
+	feedback, err := tuiutils.AddServiceToKeychain(accessSeed, endpoint, serviceName, serviceDerivationPath)
+	if err != nil {
+		m.feedback = err.Error()
+	} else {
+		m.feedback = feedback
+	}
 }
 
-func removeServiceFromKeychain(m *Model, accessSeed []byte, client archethic.APIClient, serviceName string) {
-	updateKeychain(m, accessSeed, client, func(keychain *archethic.Keychain) {
-		keychain.RemoveService(serviceName)
-	})
-}
-
-func updateKeychain(m *Model, accessSeed []byte, client archethic.APIClient, updateFunc func(*archethic.Keychain)) error {
-	keychain, err := archethic.GetKeychain(accessSeed, client)
+func removeServiceFromKeychain(m *Model, accessSeed []byte, endpoint string, serviceName string) {
+	feedback, err := tuiutils.RemoveServiceFromKeychain(accessSeed, endpoint, serviceName)
 	if err != nil {
-		return err
+		m.feedback = err.Error()
+	} else {
+		m.feedback = feedback
 	}
-	updateFunc(keychain)
-
-	keychainGenesisAddress, err := archethic.DeriveAddress(keychain.Seed, 0, archethic.ED25519, archethic.SHA256)
-	if err != nil {
-		return err
-	}
-	addressHex := hex.EncodeToString(keychainGenesisAddress)
-	transactionChainIndex := client.GetLastTransactionIndex(addressHex)
-	transaction, err := archethic.NewKeychainTransaction(keychain, uint32(transactionChainIndex))
-	if err != nil {
-		return err
-	}
-	originPrivateKey, _ := hex.DecodeString("01019280BDB84B8F8AEDBA205FE3552689964A5626EE2C60AA10E3BF22A91A036009")
-	transaction.OriginSign(originPrivateKey)
-
-	var returnedError error
-	returnedError = nil
-
-	ts := archethic.NewTransactionSender(&client)
-	ts.AddOnRequiredConfirmation(func(nbConf int) {
-		m.feedback = "\nKeychain's transaction confirmed."
-	})
-	ts.AddOnError(func(senderContext, message string) {
-		returnedError = errors.New(message)
-		ts.Unsubscribe("error")
-	})
-	ts.SendTransaction(transaction, 100, 60)
-
-	return returnedError
 }
 
 func (m Model) View() string {
@@ -651,4 +577,12 @@ func urlView(m Model) string {
 	}
 
 	return s.String()
+}
+
+func getAccessKey(m Model) ([]byte, error) {
+	accessSeed, err := archethic.MaybeConvertToHex(m.inputs[1].Value())
+	if m.pvKeyBytes != nil {
+		accessSeed = m.pvKeyBytes
+	}
+	return accessSeed, err
 }
