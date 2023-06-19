@@ -46,7 +46,6 @@ func extractTransactionFromInputFile(config string) (ConfiguredTransaction, erro
 }
 
 func extractTransactionFromInputFlags(cmd *cobra.Command) (ConfiguredTransaction, error) {
-	accessSeed, _ := cmd.Flags().GetString("access-seed")
 	index, _ := cmd.Flags().GetInt("index")
 	serviceName, _ := cmd.Flags().GetString("serviceName")
 	recipients, _ := cmd.Flags().GetStringSlice("recipients")
@@ -123,16 +122,10 @@ func extractTransactionFromInputFlags(cmd *cobra.Command) (ConfiguredTransaction
 		smartContractStr = string(smartContractBytes)
 	}
 
-	privateKeyPath, _ := cmd.Flags().GetString("ssh")
-
-	var accessSeedBytes []byte
-	if privateKeyPath != "" {
-		accessSeedBytes = tuiutils.GetSSHPrivateKey(privateKeyPath)
-	} else {
-		var err error
-		accessSeedBytes, err = archethic.MaybeConvertToHex(accessSeed)
-		cobra.CheckErr(err)
-	}
+	err = validateRequiredFlags(cmd.Flags(), "ssh", "ssh-path", "access-seed")
+	cobra.CheckErr(err)
+	accessSeedBytes, err := tuiutils.GetSeedBytes(cmd.Flags(), "ssh", "ssh-path", "access-seed")
+	cobra.CheckErr(err)
 
 	return ConfiguredTransaction{
 		accessSeed:     accessSeedBytes,
@@ -276,7 +269,10 @@ func GetSendTransactionCmd() *cobra.Command {
 	sendTransactionCmd.Flags().String("config", "", "The file location of the YAML configuration file")
 	sendTransactionCmd.Flags().Var(&endpoint, "endpoint", "Endpoint (local|testnet|mainnet|[custom url])")
 	sendTransactionCmd.Flags().String("access-seed", "", "Access Seed")
-	sendTransactionCmd.Flags().String("ssh", "", "Path to ssh key")
+	sendTransactionCmd.Flags().Bool("ssh", false, "Enable SSH key mode")
+	sendTransactionCmd.Flags().String("ssh-path", GetFirstSshKeyDefaultPath(), "Path to ssh key")
+	sendTransactionCmd.MarkFlagsMutuallyExclusive("access-seed", "ssh")
+	sendTransactionCmd.MarkFlagsMutuallyExclusive("access-seed", "ssh-path")
 	sendTransactionCmd.Flags().Int("index", 0, "Index")
 	sendTransactionCmd.Flags().Var(&ellipticCurve, "elliptic-curve", "Elliptic Curve (ED25519|P256|SECP256K1)")
 	sendTransactionCmd.Flags().Var(&transactionType, "transaction-type", "Transaction Type (keychain_access|keychain|transfer|hosting|token|data|contract|code_proposal|code_approval)")

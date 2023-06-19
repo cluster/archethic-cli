@@ -33,7 +33,7 @@ go build .
 By default the CLI works as TUI (terminal user interface) application allowing the application to be interactive. 
 
 ## Main menu
-To launch the archetic-cli with a TUI (terminal user interface), you need to call the executable without any flag. You could additionnally pass the `--ssh` flag and pass the location of your ssh key file (if a passphrase is needed, a prompt will appear to enter it), and the ssh key will be used as a seed.
+To launch the archetic-cli with a TUI (terminal user interface), you need to call the executable without any flag. You could additionnally pass the `--ssh` flag (to use `~/.ssh/id_ed25519` or `~/.ssh/id_rsa`) or you can pass `--ssh-path` (with the location of your ssh key file). If a passphrase is needed, a prompt will appear to enter it), and the ssh key will be used as a seed.
 When launching the Archethic TUI you will access to the main menu that allows you to select an action. 
 
 - Generate an address
@@ -145,7 +145,8 @@ It is also possible to call the archethic cli tool using the command line.
 `generate-address`Get the address of a transaction based on parameters
 ### Params
 - `--seed`  (string) the seed
-- `--ssh` (string) path to ssh key to generate a seed, if a passphrase is needed, a prompt will appear to enter it. If this flag is passed, then the `--seed` will be ignored.
+- `--ssh` (bool) enables ssh option for the seed. If the `--ssh-path` flag is not set, it tries to open the default key files: first `~/.ssh/id_ed25519` and if it doesn't exist, then it tries `~/.ssh/id_rsa`. If `--ssh-path` is passed, then provided value is used. If a passphrase is needed, a prompt will appear to enter it. Can't be set if `seed` is set.
+- `--ssh-path` (string) path to ssh key to generate a seed, if a passphrase is needed, a prompt will appear to enter it. Can't be set if `--seed` is set.
 - `--index` (integer) index of the transaction
 - `--hash-algorithm`  (SHA256|SHA512|SHA3_256|SHA3_512|BLAKE2B) the hash algorithm. Default value is `SHA256`
 - `--elliptic-curve` (ED25519|P256|SECP256K1) the elliptic curve. The default value is `ED25519`
@@ -157,7 +158,8 @@ Send a transaction. It’s also possible to send a transaction for a specific se
 - `--config` (string) the path of the yaml configuration file (see below for the explanation of the parameters), if the config flag is passed, the other flags will be ignored for the configuration of the transaction
 - `--endpoint`  (local|testnet|mainnet|[custom url]) the endpoint to use, you can write your own URL. Default value is `local`.
 - `--access-seed`(string) the access seed
-- `--ssh` (string) path to ssh key to generate a seed, if a passphrase is needed, a prompt will appear to enter it. If this flag is passed, then the `--access-seed` will be ignored.
+- `--ssh` (bool) enables ssh option for the seed. If the `--ssh-path` flag is not set, it tries to open the default key files: first `~/.ssh/id_ed25519` and if it doesn't exist, then it tries `~/.ssh/id_rsa`. If `--ssh-path` is passed, then provided value is used. If a passphrase is needed, a prompt will appear to enter it. Can't be set if `--access-seed` is set.
+- `--ssh-path` (string) path to ssh key to generate a seed, if a passphrase is needed, a prompt will appear to enter it. Can't be set if `--access-seed` is set.
 - `--index` (integer) the index of the new transaction. The default value is the last transaction index (which is fetched).
 - `--elliptic-curve` (ED25519|P256|SECP256K1) the elliptic curve. The default value is `ED25519`
 - `transaction-type`  (keychain_access|keychain|transfer|hosting|token|data|contract|code_proposal|code_approval) the transaction type. The default value is `transfer`.
@@ -210,14 +212,16 @@ ownerships:
 ### Params
 - `--endpoint`  (local|testnet|mainnet|[custom url]) the endpoint to use, you can write your own URL. Default value is `local`.
 - `--access-seed`(string) the access seed of the keychain
-- `--ssh` (string) path to ssh key to generate a seed, if a passphrase is needed, a prompt will appear to enter it. If this flag is passed, then the `--access-seed` will be ignored.
+- `--ssh` (bool) enables ssh option for the seed. If the `--ssh-path` flag is not set, it tries to open the default key files: first `~/.ssh/id_ed25519` and if it doesn't exist, then it tries `~/.ssh/id_rsa`. If `--ssh-path` is passed, then provided value is used. If a passphrase is needed, a prompt will appear to enter it. Can't be set if `--access-seed` is set.
+- `--ssh-path` (string) path to ssh key to generate a seed, if a passphrase is needed, a prompt will appear to enter it. Can't be set if `--access-seed` is set.
 
 ## Get keychain
 `get-keychain` access the details of the keychain (list of services)
 ### Params
 - `--endpoint`  (local|testnet|mainnet|[custom url]) the endpoint to use, you can write your own URL. Default value is `local`.
 - `--access-seed`(string) the access seed of the keychain
-- `--ssh` (string) path to ssh key to generate a seed, if a passphrase is needed, a prompt will appear to enter it. If this flag is passed, then the `--access-seed` will be ignored.
+- `--ssh` (bool) enables ssh option for the seed. If the `--ssh-path` flag is not set, it tries to open the default key files: first `~/.ssh/id_ed25519` and if it doesn't exist, then it tries `~/.ssh/id_rsa`. If `--ssh-path` is passed, then provided value is used. If a passphrase is needed, a prompt will appear to enter it. Can't be set if `--access-seed` is set.
+- `--ssh-path` (string) path to ssh key to generate a seed, if a passphrase is needed, a prompt will appear to enter it. Can't be set if `--access-seed` is set.
 
 ## Add service to keychain
 `add-service-to-keychain` add a service to a keychain
@@ -226,7 +230,8 @@ ownerships:
 - `--access-seed`(string) the access seed of the keychain
 - `--service-name` (string) the name of the service to add
 - `--derivation-path` (string) the derivation path of the service to add
-- `--ssh` (string) path to ssh key to generate a seed, if a passphrase is needed, a prompt will appear to enter it. If this flag is passed, then the `--access-seed` will be ignored.
+- `--ssh` (bool) enables ssh option for the seed. If the `--ssh-path` flag is not set, it tries to open the default key files: first `~/.ssh/id_ed25519` and if it doesn't exist, then it tries `~/.ssh/id_rsa`. If `--ssh-path` is passed, then provided value is used. If a passphrase is needed, a prompt will appear to enter it. Can't be set if `--access-seed` is set.
+- `--ssh-path` (string) path to ssh key to generate a seed, if a passphrase is needed, a prompt will appear to enter it. Can't be set if `--access-seed` is set.
 
 ## Delete service from keychain
 `delete-service-from-keychain` delete a service from a keychain
@@ -234,4 +239,5 @@ ownerships:
 - `--endpoint`  (local|testnet|mainnet|[custom url]) the endpoint to use, you can write your own URL. Default value is `local`.
 - `--access-seed`(string) the access seed of the keychain
 - `--service-name` (string) the name of the service to delete
-- `--ssh` (string) path to ssh key to generate a seed, if a passphrase is needed, a prompt will appear to enter it. If this flag is passed, then the `--access-seed` will be ignored.
+- `--ssh` (bool) enables ssh option for the seed. If the `--ssh-path` flag is not set, it tries to open the default key files: first `~/.ssh/id_ed25519` and if it doesn't exist, then it tries `~/.ssh/id_rsa`. If `--ssh-path` is passed, then provided value is used. If a passphrase is needed, a prompt will appear to enter it. Can't be set if `--access-seed` is set.
+- `--ssh-path` (string) path to ssh key to generate a seed, if a passphrase is needed, a prompt will appear to enter it. Can't be set if `--access-seed` is set.

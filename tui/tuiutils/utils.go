@@ -10,11 +10,13 @@ import (
 	"fmt"
 	"io/ioutil"
 	"log"
+	"os"
 	"reflect"
 	"strings"
 	"syscall"
 
 	archethic "github.com/archethic-foundation/libgo"
+	"github.com/spf13/pflag"
 	"golang.org/x/crypto/ssh"
 	"golang.org/x/crypto/ssh/terminal"
 )
@@ -265,21 +267,21 @@ func buildKeychainTransaction(seed []byte, client *archethic.APIClient, transact
 	return nil
 }
 
-func GetSSHPrivateKey(privateKeyPath string) []byte {
+func GetSSHPrivateKey(privateKeyPath string) ([]byte, error) {
 	var pvKeyBytes []byte
 	// Read the private key file
 	privateBytes, err := ioutil.ReadFile(privateKeyPath)
 	if err != nil {
-		log.Fatalf("Failed to load private key: %v", err)
+		return nil, err
 	}
 
 	pvKey, err := ssh.ParseRawPrivateKey(privateBytes)
 
 	if _, ok := err.(*ssh.PassphraseMissingError); ok {
-		passphrase := promptPassphrase()
+		passphrase := promptPassphrase(privateKeyPath)
 		pvKey, err = ssh.ParseRawPrivateKeyWithPassphrase(privateBytes, []byte(passphrase))
 		if err != nil {
-			log.Fatalf("Failed to parse private key: %v", err)
+			return nil, errors.New("Failed to parse private key: " + err.Error())
 		}
 	}
 
@@ -291,14 +293,14 @@ func GetSSHPrivateKey(privateKeyPath string) []byte {
 	case *dsa.PrivateKey:
 		pvKeyBytes = pvKey.X.Bytes()
 	default:
-		log.Fatalf("Only RSA, ECDSA and DSA keys are supported, got %T", pvKey)
+		return nil, errors.New("Only RSA, ECDSA and DSA keys are supported, got " + reflect.TypeOf(pvKey).String())
 	}
-	return pvKeyBytes
+	return pvKeyBytes, nil
 
 }
 
-func promptPassphrase() string {
-	fmt.Print("Enter passphrase: ")
+func promptPassphrase(privateKeyPath string) string {
+	fmt.Printf("Enter passphrase for key '%s': ", privateKeyPath)
 	passphrase, err := terminal.ReadPassword(int(syscall.Stdin))
 	if err != nil {
 		log.Fatalf("Failed to read passphrase: %v", err)
@@ -316,4 +318,37 @@ func GetLastTransactionIndex(url string, curve archethic.Curve, seed []byte) (in
 	addressHex := hex.EncodeToString(address)
 	index := client.GetLastTransactionIndex(addressHex)
 	return index, nil
+}
+
+func GetSeedBytes(flags *pflag.FlagSet, sshFlagKey, sshPathFlagKey, seedFlagKey string) ([]byte, error) {
+	ssh, _ := flags.GetBool(sshFlagKey)
+	isSshPathSet := flags.Lookup(sshPathFlagKey).Changed
+	sshEnabled := ssh || isSshPathSet
+	if sshEnabled {
+		// try to get the ssh key based on the provided path (or the default value)
+		privateKeyPath, _ := flags.GetString(sshPathFlagKey)
+		key, err := GetSSHPrivateKey(privateKeyPath)
+		// if the path is provided but we get an error, return the error
+		if flags.Changed(sshPathFlagKey) && err != nil {
+			return nil, err
+		}
+		// but if the key was found, return it
+		if key != nil {
+			return key, nil
+		}
+
+		// otherwise try to get the second default value for ssh key path
+		home, _ := os.UserHomeDir()
+		key, err = GetSSHPrivateKey(home + "/.ssh/id_rsa")
+		if err != nil {
+			return nil, err
+		}
+		return key, nil
+	} else {
+		if seedFlagKey == "" {
+			return nil, nil
+		}
+		accessSeed, _ := flags.GetString(seedFlagKey)
+		return archethic.MaybeConvertToHex(accessSeed)
+	}
 }

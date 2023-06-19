@@ -5,7 +5,6 @@ import (
 	"fmt"
 
 	"github.com/archethic-foundation/archethic-cli/tui/tuiutils"
-	archethic "github.com/archethic-foundation/libgo"
 	"github.com/spf13/cobra"
 )
 
@@ -14,18 +13,10 @@ func GetKeychainCmd() *cobra.Command {
 		Use:   "get-keychain",
 		Short: "Get keychain",
 		Run: func(cmd *cobra.Command, args []string) {
-			accessSeed, _ := cmd.Flags().GetString("access-seed")
-			privateKeyPath, _ := cmd.Flags().GetString("ssh")
-
-			var accessSeedBytes []byte
-			if privateKeyPath != "" {
-				accessSeedBytes = tuiutils.GetSSHPrivateKey(privateKeyPath)
-			} else {
-				var err error
-				accessSeedBytes, err = archethic.MaybeConvertToHex(accessSeed)
-				cobra.CheckErr(err)
-			}
-
+			err := validateRequiredFlags(cmd.Flags(), "ssh", "ssh-path", "access-seed")
+			cobra.CheckErr(err)
+			accessSeedBytes, err := tuiutils.GetSeedBytes(cmd.Flags(), "ssh", "ssh-path", "access-seed")
+			cobra.CheckErr(err)
 			keychain, err := tuiutils.AccessKeychain(endpoint.String(), accessSeedBytes)
 			cobra.CheckErr(err)
 			jsonServices, err := json.Marshal(keychain.Services)
@@ -35,6 +26,9 @@ func GetKeychainCmd() *cobra.Command {
 	}
 	getKeychainCmd.Flags().Var(&endpoint, "endpoint", "Endpoint (local|testnet|mainnet|[custom url])")
 	getKeychainCmd.Flags().String("access-seed", "", "Access Seed")
-	getKeychainCmd.Flags().String("ssh", "", "Path to ssh key")
+	getKeychainCmd.Flags().Bool("ssh", false, "Enable SSH key mode")
+	getKeychainCmd.Flags().String("ssh-path", GetFirstSshKeyDefaultPath(), "Path to ssh key")
+	getKeychainCmd.MarkFlagsMutuallyExclusive("access-seed", "ssh")
+	getKeychainCmd.MarkFlagsMutuallyExclusive("access-seed", "ssh-path")
 	return getKeychainCmd
 }

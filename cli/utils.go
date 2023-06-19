@@ -2,9 +2,12 @@ package cli
 
 import (
 	"errors"
+	"fmt"
 	"net/url"
+	"os"
 
 	archethic "github.com/archethic-foundation/libgo"
+	"github.com/spf13/pflag"
 )
 
 var (
@@ -315,4 +318,18 @@ func (tt *TransactionTypeCLI) GetTransactionType() (archethic.TransactionType, e
 	default:
 		return archethic.TransferType, errors.New("invalid TransactionType value")
 	}
+}
+
+func validateRequiredFlags(flags *pflag.FlagSet, sshFlagKey, sshPathFlagKey, seedKey string) error {
+	// validate if sshFlagKey or sshPathFlagKey or seedKey is set
+	if !flags.Changed(sshFlagKey) && !flags.Changed(sshPathFlagKey) && !flags.Changed(seedKey) {
+		errorMessage := fmt.Sprintf("required flag(s) \"%s\" or \"%s\" or \"%s\" not set", sshFlagKey, sshPathFlagKey, seedKey)
+		return errors.New(errorMessage)
+	}
+	return nil
+}
+
+func GetFirstSshKeyDefaultPath() string {
+	home, _ := os.UserHomeDir()
+	return home + "/.ssh/id_ed25519"
 }

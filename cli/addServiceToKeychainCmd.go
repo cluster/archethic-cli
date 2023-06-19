@@ -4,7 +4,6 @@ import (
 	"fmt"
 
 	"github.com/archethic-foundation/archethic-cli/tui/tuiutils"
-	archethic "github.com/archethic-foundation/libgo"
 	"github.com/spf13/cobra"
 )
 
@@ -13,21 +12,12 @@ func GetAddServiceToKeychainCmd() *cobra.Command {
 		Use:   "add-service-to-keychain",
 		Short: "Add service to keychain",
 		Run: func(cmd *cobra.Command, args []string) {
-			accessSeed, _ := cmd.Flags().GetString("access-seed")
 			serviceName, _ := cmd.Flags().GetString("service-name")
 			derivationPath, _ := cmd.Flags().GetString("derivation-path")
-			privateKeyPath, _ := cmd.Flags().GetString("ssh")
-			var accessSeedBytes []byte
-			if privateKeyPath != "" {
-				accessSeedBytes = tuiutils.GetSSHPrivateKey(privateKeyPath)
-			} else {
-				var err error
-				accessSeedBytes, err = archethic.MaybeConvertToHex(accessSeed)
-				if err != nil {
-					fmt.Println(err)
-					return
-				}
-			}
+			err := validateRequiredFlags(cmd.Flags(), "ssh", "ssh-path", "access-seed")
+			cobra.CheckErr(err)
+			accessSeedBytes, err := tuiutils.GetSeedBytes(cmd.Flags(), "ssh", "ssh-path", "access-seed")
+			cobra.CheckErr(err)
 
 			// set default derivation path if not set
 			if !cmd.Flag("derivation-path").Changed {
@@ -44,6 +34,9 @@ func GetAddServiceToKeychainCmd() *cobra.Command {
 	addServiceToKeychainCmd.Flags().String("access-seed", "", "Access Seed")
 	addServiceToKeychainCmd.Flags().String("service-name", "", "Service Name")
 	addServiceToKeychainCmd.Flags().String("derivation-path", "", "Derivation Path")
-	addServiceToKeychainCmd.Flags().String("ssh", "", "Path to ssh key")
+	addServiceToKeychainCmd.Flags().Bool("ssh", false, "Enable SSH key mode")
+	addServiceToKeychainCmd.Flags().String("ssh-path", GetFirstSshKeyDefaultPath(), "Path to ssh key")
+	addServiceToKeychainCmd.MarkFlagsMutuallyExclusive("access-seed", "ssh")
+	addServiceToKeychainCmd.MarkFlagsMutuallyExclusive("access-seed", "ssh-path")
 	return addServiceToKeychainCmd
 }

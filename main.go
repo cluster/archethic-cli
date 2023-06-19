@@ -12,9 +12,13 @@ var rootCmd = &cobra.Command{
 	Short: "Archethic CLI",
 	Run: func(cmd *cobra.Command, args []string) {
 		var privateKey []byte
-		if cmd.Flags().Changed("ssh") {
-			privateKeyPath, _ := cmd.Flags().GetString("ssh")
-			privateKey = tuiutils.GetSSHPrivateKey(privateKeyPath)
+		ssh, _ := cmd.Flags().GetBool("ssh")
+		isSshPathSet := cmd.Flag("ssh-path").Changed
+		isSshEnabled := ssh || isSshPathSet
+		if isSshEnabled {
+			var err error
+			privateKey, err = tuiutils.GetSeedBytes(cmd.Flags(), "ssh", "ssh-path", "")
+			cobra.CheckErr(err)
 		}
 		tui.StartTea(privateKey)
 	},
@@ -35,7 +39,8 @@ func main() {
 	rootCmd.AddCommand(addServiceToKeychainCmd)
 	rootCmd.AddCommand(deleteServiceFromKeychainCmd)
 
-	rootCmd.Flags().String("ssh", "", "Path to ssh key")
+	rootCmd.Flags().Bool("ssh", false, "Enable SSH key mode")
+	rootCmd.Flags().String("ssh-path", cli.GetFirstSshKeyDefaultPath(), "Path to ssh key")
 
 	err := rootCmd.Execute()
 	cobra.CheckErr(err)
