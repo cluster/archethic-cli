@@ -1,6 +1,7 @@
 package keychainmanagementui
 
 import (
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"sort"

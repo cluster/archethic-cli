@@ -7,6 +7,7 @@ import (
 	"crypto/rand"
 	"crypto/rsa"
 	"encoding/hex"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io/ioutil"
@@ -182,14 +183,54 @@ func updateKeychain(accessSeed []byte, endpoint string, updateFunc func(*archeth
 	return returnedFeedback, returnedError
 }
 
-func SendTransaction(transaction archethic.TransactionBuilder, secretKey []byte, curve archethic.Curve, serviceMode bool, endpoint string, transactionIndex int, serviceName string, storageNouncePublicKey string, seed []byte) (string, error) {
+func SendTransaction(transaction *archethic.TransactionBuilder, secretKey []byte, curve archethic.Curve, serviceMode bool, endpoint string, transactionIndex int, serviceName string, storageNouncePublicKey string, seed []byte) (string, error) {
+	err := buildTransactionToSend(transaction, secretKey, curve, serviceMode, endpoint, transactionIndex, serviceName, storageNouncePublicKey, seed)
+	if err != nil {
+		return "", err
+	}
 	feedback := ""
+	client := archethic.NewAPIClient(endpoint)
+	ts := archethic.NewTransactionSender(client)
+	ts.AddOnSent(func() {
+		feedback = endpoint + "/explorer/transaction/" + strings.ToUpper(hex.EncodeToString(transaction.Address))
+	})
+
+	ts.AddOnError(func(sender, message string) {
+		feedback = "Transaction error: " + message
+	})
+
+	ts.SendTransaction(transaction, 100, 60)
+	return feedback, nil
+}
+
+func GetTransactionFeeJson(transaction *archethic.TransactionBuilder, secretKey []byte, curve archethic.Curve, serviceMode bool, endpoint string, transactionIndex int, serviceName string, storageNouncePublicKey string, seed []byte) (string, error) {
+	fee, err := GetTransactionFee(transaction, secretKey, curve, serviceMode, endpoint, transactionIndex, serviceName, storageNouncePublicKey, seed)
+	if err != nil {
+		return "", err
+	}
+	feeBytes, err := json.Marshal(fee)
+	if err != nil {
+		return "", err
+	}
+	return string(feeBytes), nil
+}
+
+func GetTransactionFee(transaction *archethic.TransactionBuilder, secretKey []byte, curve archethic.Curve, serviceMode bool, endpoint string, transactionIndex int, serviceName string, storageNouncePublicKey string, seed []byte) (archethic.Fee, error) {
+	err := buildTransactionToSend(transaction, secretKey, curve, serviceMode, endpoint, transactionIndex, serviceName, storageNouncePublicKey, seed)
+	if err != nil {
+		return archethic.Fee{}, err
+	}
+	client := archethic.NewAPIClient(endpoint)
+	return client.GetTransactionFee(transaction)
+}
+
+func buildTransactionToSend(transaction *archethic.TransactionBuilder, secretKey []byte, curve archethic.Curve, serviceMode bool, endpoint string, transactionIndex int, serviceName string, storageNouncePublicKey string, seed []byte) error {
 	if len(transaction.Data.Code) > 0 {
 		ownershipIndex := -1
 		for i, ownership := range transaction.Data.Ownerships {
 			decryptSecret, err := archethic.AesDecrypt(ownership.Secret, secretKey)
 			if err != nil {
-				return "", err
+				return err
 			}
 			decodedSecret := string(decryptSecret)
 
@@ -200,7 +241,7 @@ func SendTransaction(transaction archethic.TransactionBuilder, secretKey []byte,
 		}
 
 		if ownershipIndex == -1 {
-			return "", errors.New("you need to create an ownership with the transaction seed as secret and authorize node public key to let nodes generate new transaction from your smart contract")
+			return errors.New("you need to create an ownership with the transaction seed as secret and authorize node public key to let nodes generate new transaction from your smart contract")
 		} else {
 			authorizedKeyIndex := -1
 			for i, authKey := range transaction.Data.Ownerships[ownershipIndex].AuthorizedKeys {
@@ -211,7 +252,7 @@ func SendTransaction(transaction archethic.TransactionBuilder, secretKey []byte,
 			}
 
 			if authorizedKeyIndex == -1 {
-				return "", errors.New("you need to create an ownership with the transaction seed as secret and authorize node public key to let nodes generate new transaction from your smart contract")
+				return errors.New("you need to create an ownership with the transaction seed as secret and authorize node public key to let nodes generate new transaction from your smart contract")
 			}
 		}
 	}
@@ -219,31 +260,20 @@ func SendTransaction(transaction archethic.TransactionBuilder, secretKey []byte,
 	client := archethic.NewAPIClient(endpoint)
 
 	if serviceMode {
-		err := buildKeychainTransaction(seed, client, &transaction, serviceName)
+		err := buildKeychainTransaction(seed, client, transaction, serviceName)
 		if err != nil {
-			return "", err
+			return err
 		}
 	} else {
 		err := transaction.Build(seed, uint32(transactionIndex), curve, archethic.SHA256)
 		if err != nil {
-			return "", err
+			return err
 		}
 	}
 
 	originPrivateKey, _ := hex.DecodeString("01019280BDB84B8F8AEDBA205FE3552689964A5626EE2C60AA10E3BF22A91A036009")
 	transaction.OriginSign(originPrivateKey)
-
-	ts := archethic.NewTransactionSender(client)
-	ts.AddOnSent(func() {
-		feedback = endpoint + "/explorer/transaction/" + strings.ToUpper(hex.EncodeToString(transaction.Address))
-	})
-
-	ts.AddOnError(func(sender, message string) {
-		feedback = "Transaction error: " + message
-	})
-
-	ts.SendTransaction(&transaction, 100, 60)
-	return feedback, nil
+	return nil
 }
 
 func buildKeychainTransaction(seed []byte, client *archethic.APIClient, transaction *archethic.TransactionBuilder, serviceName string) error {

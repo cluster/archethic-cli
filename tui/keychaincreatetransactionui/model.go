@@ -4,6 +4,7 @@ import (
 	"crypto/rand"
 	"errors"
 	"fmt"
+	"math"
 	"strconv"
 	"strings"
 
@@ -29,21 +30,27 @@ type TransactionSent struct {
 	Error error
 	Model Model
 }
+type TransactionFeeSent struct {
+	Error error
+	Model Model
+}
 
 var (
-	focusedStyle               = lipgloss.NewStyle().Foreground(lipgloss.Color("205"))
-	blurredStyle               = lipgloss.NewStyle().Foreground(lipgloss.Color("240"))
-	cursorStyle                = focusedStyle.Copy()
-	noStyle                    = lipgloss.NewStyle()
-	helpStyle                  = blurredStyle.Copy()
-	focusedAddAuthKey          = focusedStyle.Copy().Render("[ Add authorization key ]")
-	blurredAddAuthKey          = fmt.Sprintf("[ %s ]", blurredStyle.Render("Add authorization key"))
-	focusedLoadStorageNouncePK = focusedStyle.Copy().Render("[ Load Storage Nounce Public Key ]")
-	blurredLoadStorageNouncePK = fmt.Sprintf("[ %s ]", blurredStyle.Render("Load Storage Nounce Public Key"))
-	focusedButton              = focusedStyle.Copy().Render("[ Add ]")
-	blurredButton              = fmt.Sprintf("[ %s ]", blurredStyle.Render("Add"))
-	focusedResetButton         = focusedStyle.Copy().Render("[ Reset ]")
-	blurredResetButton         = fmt.Sprintf("[ %s ]", blurredStyle.Render("Reset"))
+	focusedStyle                   = lipgloss.NewStyle().Foreground(lipgloss.Color("205"))
+	blurredStyle                   = lipgloss.NewStyle().Foreground(lipgloss.Color("240"))
+	cursorStyle                    = focusedStyle.Copy()
+	noStyle                        = lipgloss.NewStyle()
+	helpStyle                      = blurredStyle.Copy()
+	focusedAddAuthKey              = focusedStyle.Copy().Render("[ Add authorization key ]")
+	blurredAddAuthKey              = fmt.Sprintf("[ %s ]", blurredStyle.Render("Add authorization key"))
+	focusedLoadStorageNouncePK     = focusedStyle.Copy().Render("[ Load Storage Nounce Public Key ]")
+	blurredLoadStorageNouncePK     = fmt.Sprintf("[ %s ]", blurredStyle.Render("Load Storage Nounce Public Key"))
+	focusedButton                  = focusedStyle.Copy().Render("[ Add ]")
+	blurredButton                  = fmt.Sprintf("[ %s ]", blurredStyle.Render("Add"))
+	focusedResetButton             = focusedStyle.Copy().Render("[ Reset ]")
+	blurredResetButton             = fmt.Sprintf("[ %s ]", blurredStyle.Render("Reset"))
+	focusedGetTransactionFeeButton = focusedStyle.Copy().Render("[ Get Transaction Fee ]")
+	blurredGetTransactionFeeButton = fmt.Sprintf("[ %s ]", blurredStyle.Render("Get Transaction Fee"))
 )
 
 type RenderFunc func(m Model) string
@@ -60,13 +67,14 @@ const (
 )
 
 const (
-	MAIN_ADD_BUTTON_INDEX         = 17
-	MAIN_RESET_BUTTON_INDEX       = 18
-	FIRST_TRANSACTION_TYPE_INDEX  = 8
-	URL_INDEX                     = 4
-	SEED_INDEX                    = 5
-	CURVE_INDEX                   = 6
-	TRANSACTION_INDEX_FIELD_INDEX = 7
+	MAIN_ADD_BUTTON_INDEX                 = 17
+	MAIN_GET_TRANSACTION_FEE_BUTTON_INDEX = 18
+	MAIN_RESET_BUTTON_INDEX               = 19
+	FIRST_TRANSACTION_TYPE_INDEX          = 8
+	URL_INDEX                             = 4
+	SEED_INDEX                            = 5
+	CURVE_INDEX                           = 6
+	TRANSACTION_INDEX_FIELD_INDEX         = 7
 )
 
 type SwitchTab struct{}
@@ -184,10 +192,23 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.feedback = msg.Model.feedback
 		}
 		return m, nil
+	case TransactionFeeSent:
+		m.showSpinner = false
+		if msg.Error != nil {
+			m.feedback = msg.Error.Error()
+		} else {
+			m.feedback = msg.Model.feedback
+		}
+		return m, nil
 	case SendTransaction:
 		m.showSpinner = true
 		return m, func() tea.Msg {
 			return sendTransaction(&m, msg.Curve, msg.Seed)
+		}
+	case GetTransactionFee:
+		m.showSpinner = true
+		return m, func() tea.Msg {
+			return getTransactionFee(&m, msg.Curve, msg.Seed)
 		}
 	case ResetInterface:
 		m.resetInterface(m.pvKeyBytes)
@@ -454,10 +475,23 @@ func min(a, b int) int {
 
 func sendTransaction(m *Model, curve archethic.Curve, seed []byte) TransactionSent {
 	m.feedback = ""
-	feedback, error := tuiutils.SendTransaction(m.transaction, m.secretKey, curve, m.serviceMode, m.url, m.transactionIndex, m.serviceName, m.storageNouncePublicKey, seed)
+	feedback, error := tuiutils.SendTransaction(&m.transaction, m.secretKey, curve, m.serviceMode, m.url, m.transactionIndex, m.serviceName, m.storageNouncePublicKey, seed)
 	m.feedback = fmt.Sprintf("Transaction sent: %s", feedback)
 	if error != nil {
 		return TransactionSent{Model: *m, Error: error}
 	}
 	return TransactionSent{Model: *m, Error: nil}
+}
+
+func getTransactionFee(m *Model, curve archethic.Curve, seed []byte) TransactionFeeSent {
+	m.feedback = ""
+	fee, error := tuiutils.GetTransactionFee(&m.transaction, m.secretKey, curve, m.serviceMode, m.url, m.transactionIndex, m.serviceName, m.storageNouncePublicKey, seed)
+	humanReadableFee := float64(fee.Fee) / math.Pow(10, 8)
+	usdEquivalent := humanReadableFee * float64(fee.Rates.Usd)
+	eurEquivanlent := humanReadableFee * float64(fee.Rates.Eur)
+	m.feedback = fmt.Sprintf("Transaction fee: %f UCO (~ $%f) (~ %f€)", humanReadableFee, usdEquivalent, eurEquivanlent)
+	if error != nil {
+		return TransactionFeeSent{Model: *m, Error: error}
+	}
+	return TransactionFeeSent{Model: *m, Error: nil}
 }

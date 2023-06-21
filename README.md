@@ -123,6 +123,11 @@ ownerships:
       - 000150D4592BD0AC74BA6B5BAC49E505FB878F14DEED1692E5017ABFEFE49D060B6E
 ```
 
+## Get transaction fee
+`get-transaction-fee`
+Gets the transaction fee, in the following format `{"Fee":16617375,"Rates":{"Eur":0.05518,"Usd":0.0602}}`.
+The flags are the same as those used for the `send-transaction` command.
+
 
 #### Create keychain
 `create-keychain` creates a new keychain
