@@ -13,9 +13,9 @@ func GetCreateKeychainCmd() *cobra.Command {
 		Use:   "create-keychain",
 		Short: "Create keychain",
 		Run: func(cmd *cobra.Command, args []string) {
-			err := validateRequiredFlags(cmd.Flags(), "ssh", "ssh-path", "access-seed")
+			err := validateRequiredFlags(cmd.Flags(), "ssh", "ssh-path", "access-seed", "bip39")
 			cobra.CheckErr(err)
-			accessSeedBytes, err := tuiutils.GetSeedBytes(cmd.Flags(), "ssh", "ssh-path", "access-seed")
+			accessSeedBytes, err := tuiutils.GetSeedBytes(cmd.Flags(), "ssh", "ssh-path", "access-seed", "bip39")
 			cobra.CheckErr(err)
 
 			feedback, keychainSeed, keychainTransactionAddress, keychainAccessTransactionAddress, err := tuiutils.CreateKeychain(endpoint.String(), accessSeedBytes)
@@ -38,7 +38,11 @@ func GetCreateKeychainCmd() *cobra.Command {
 	createKeychainCmd.Flags().String("access-seed", "", "Access Seed")
 	createKeychainCmd.Flags().Bool("ssh", false, "Enable SSH key mode")
 	createKeychainCmd.Flags().String("ssh-path", GetFirstSshKeyDefaultPath(), "Path to ssh key")
+	createKeychainCmd.Flags().Bool("bip39", false, "Enable BIP39 words for seed")
 	createKeychainCmd.MarkFlagsMutuallyExclusive("access-seed", "ssh")
 	createKeychainCmd.MarkFlagsMutuallyExclusive("access-seed", "ssh-path")
+	createKeychainCmd.MarkFlagsMutuallyExclusive("bip39", "ssh")
+	createKeychainCmd.MarkFlagsMutuallyExclusive("bip39", "ssh-path")
+	createKeychainCmd.MarkFlagsMutuallyExclusive("bip39", "access-seed")
 	return createKeychainCmd
 }

@@ -15,9 +15,9 @@ func GetGenerateAddressCmd() *cobra.Command {
 		Short: "Generate address",
 		Run: func(cmd *cobra.Command, args []string) {
 			index, _ := cmd.Flags().GetInt("index")
-			err := validateRequiredFlags(cmd.Flags(), "ssh", "ssh-path", "seed")
+			err := validateRequiredFlags(cmd.Flags(), "ssh", "ssh-path", "seed", "")
 			cobra.CheckErr(err)
-			seedBytes, err := tuiutils.GetSeedBytes(cmd.Flags(), "ssh", "ssh-path", "seed")
+			seedBytes, err := tuiutils.GetSeedBytes(cmd.Flags(), "ssh", "ssh-path", "seed", "")
 			cobra.CheckErr(err)
 
 			curve, err := ellipticCurve.GetCurve()

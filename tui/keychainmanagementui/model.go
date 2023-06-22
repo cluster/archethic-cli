@@ -226,10 +226,15 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			// redirect to create transaction
 			if m.focusIndex == len(m.inputs)+6+len(m.serviceNames) {
 				return m, func() tea.Msg {
+					accessKey, err := getAccessKey(m)
+					if err != nil {
+						m.feedback = err.Error()
+						return nil
+					}
 					return keychaincreatetransactionui.CreateTransactionMsg{
 						ServiceName: m.serviceNames[m.selectedService],
 						Url:         m.inputs[0].Value(),
-						Seed:        m.inputs[1].Value(),
+						Seed:        hex.EncodeToString(accessKey),
 						PvKeyBytes:  m.pvKeyBytes,
 					}
 				}
@@ -581,6 +586,17 @@ func urlView(m Model) string {
 }
 
 func getAccessKey(m Model) ([]byte, error) {
+	potentialWordsList := strings.Fields(m.inputs[1].Value())
+	if len(potentialWordsList) == 24 {
+		seed, err := tuiutils.ExtractSeedFromBip39(m.inputs[1].Value())
+		if err != nil {
+			return nil, err
+		}
+		if seed != nil {
+			return seed, nil
+		}
+	}
+
 	accessSeed, err := archethic.MaybeConvertToHex(m.inputs[1].Value())
 	if m.pvKeyBytes != nil {
 		accessSeed = m.pvKeyBytes

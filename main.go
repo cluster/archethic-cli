@@ -17,7 +17,7 @@ var rootCmd = &cobra.Command{
 		isSshEnabled := ssh || isSshPathSet
 		if isSshEnabled {
 			var err error
-			privateKey, err = tuiutils.GetSeedBytes(cmd.Flags(), "ssh", "ssh-path", "")
+			privateKey, err = tuiutils.GetSeedBytes(cmd.Flags(), "ssh", "ssh-path", "", "")
 			cobra.CheckErr(err)
 		}
 		tui.StartTea(privateKey)
