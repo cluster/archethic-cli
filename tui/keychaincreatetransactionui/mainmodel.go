@@ -72,6 +72,12 @@ type SendTransaction struct {
 	Curve archethic.Curve
 	Seed  []byte
 }
+
+type GetTransactionFee struct {
+	Curve archethic.Curve
+	Seed  []byte
+}
+
 type ResetInterface struct{}
 
 func NewMainModel(pvKeyBytes []byte) MainModel {
@@ -198,6 +204,21 @@ func (m MainModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				return m, func() tea.Msg {
 					return ResetInterface{}
 				}
+			} else if m.focusInput == MAIN_GET_TRANSACTION_FEE_BUTTON_INDEX {
+				return m, func() tea.Msg {
+					var seed []byte
+					if m.pvKeyBytes != nil {
+						seed = m.pvKeyBytes
+					} else {
+						var err error
+						seed, err = archethic.MaybeConvertToHex(m.mainInputs[1].Value())
+						if err != nil {
+							m.feedback = err.Error()
+							return m
+						}
+					}
+					return GetTransactionFee{Curve: getCurve(&m), Seed: seed}
+				}
 			}
 
 		default:
@@ -311,11 +332,18 @@ func (m MainModel) View() string {
 		button = &focusedButton
 	}
 
+	// get transaction fee button
+	getTransactionFeeButton := &blurredGetTransactionFeeButton
+	if m.focusInput == MAIN_GET_TRANSACTION_FEE_BUTTON_INDEX {
+		getTransactionFeeButton = &focusedGetTransactionFeeButton
+	}
+
 	if m.feedback != "" {
 		b.WriteString(m.feedback + "\n\n")
 	}
 
 	fmt.Fprintf(&b, "\n\n%s\n\n", *button)
+	fmt.Fprintf(&b, "%s\n\n", *getTransactionFeeButton)
 
 	// reset button
 	resetButton := &blurredResetButton

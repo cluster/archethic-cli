@@ -220,68 +220,96 @@ func mapOwnership(ownerships map[string]string) map[string][]string {
 	return result
 }
 
+func extractAndPrepareTransaction(cmd *cobra.Command, args []string, action func(*archethic.TransactionBuilder, []byte, archethic.Curve, bool, string, int, string, string, []byte) (interface{}, error)) {
+	secretKey := make([]byte, 32)
+	rand.Read(secretKey)
+
+	config, _ := cmd.Flags().GetString("config")
+	var configuredTransaction ConfiguredTransaction
+	var err error
+	if config != "" {
+		configuredTransaction, err = extractTransactionFromInputFile(config)
+		cobra.CheckErr(err)
+	} else {
+		configuredTransaction, err = extractTransactionFromInputFlags(cmd)
+		cobra.CheckErr(err)
+	}
+
+	curve, err := ellipticCurve.GetCurve()
+	cobra.CheckErr(err)
+
+	txType, err := transactionType.GetTransactionType()
+	cobra.CheckErr(err)
+
+	transaction, err := configureTransaction(configuredTransaction, txType, secretKey)
+	cobra.CheckErr(err)
+
+	serviceMode := configuredTransaction.serviceName != ""
+
+	client := archethic.NewAPIClient(endpoint.String())
+
+	// if no index is provided and not in serviceMode, get the last transaction index
+	if !cmd.Flags().Changed("index") && !serviceMode {
+		address, err := archethic.DeriveAddress([]byte(configuredTransaction.accessSeed), 0, curve, archethic.SHA256)
+		cobra.CheckErr(err)
+		addressHex := hex.EncodeToString(address)
+		configuredTransaction.index = client.GetLastTransactionIndex(addressHex)
+	}
+
+	storageNouncePublicKey, err := client.GetStorageNoncePublicKey()
+	cobra.CheckErr(err)
+
+	result, err := action(transaction, secretKey, curve, serviceMode, endpoint.String(), configuredTransaction.index, configuredTransaction.serviceName, storageNouncePublicKey, configuredTransaction.accessSeed)
+	cobra.CheckErr(err)
+	fmt.Println(result)
+}
+
 func GetSendTransactionCmd() *cobra.Command {
 	sendTransactionCmd := &cobra.Command{
 		Use:   "send-transaction",
 		Short: "Send transaction",
 		Run: func(cmd *cobra.Command, args []string) {
-			secretKey := make([]byte, 32)
-			rand.Read(secretKey)
-
-			config, _ := cmd.Flags().GetString("config")
-			var configuredTransaction ConfiguredTransaction
-			var err error
-			if config != "" {
-				configuredTransaction, err = extractTransactionFromInputFile(config)
-				cobra.CheckErr(err)
-			} else {
-				configuredTransaction, err = extractTransactionFromInputFlags(cmd)
-				cobra.CheckErr(err)
-			}
-
-			curve, err := ellipticCurve.GetCurve()
-			cobra.CheckErr(err)
-
-			txType, err := transactionType.GetTransactionType()
-			cobra.CheckErr(err)
-
-			transaction, err := configureTransaction(configuredTransaction, txType, secretKey)
-			cobra.CheckErr(err)
-
-			serviceMode := configuredTransaction.serviceName != ""
-
-			client := archethic.NewAPIClient(endpoint.String())
-
-			// if no index is provided and not in serviceMode, get the last transaction index
-			if !cmd.Flags().Changed("index") && !serviceMode {
-				configuredTransaction.index, err = tuiutils.GetLastTransactionIndex(endpoint.String(), curve, configuredTransaction.accessSeed)
-				cobra.CheckErr(err)
-			}
-
-			storageNouncePublicKey, err := client.GetStorageNoncePublicKey()
-			cobra.CheckErr(err)
-
-			feedback, err := tuiutils.SendTransaction(*transaction, secretKey, curve, serviceMode, endpoint.String(), configuredTransaction.index, configuredTransaction.serviceName, storageNouncePublicKey, configuredTransaction.accessSeed)
-			cobra.CheckErr(err)
-			fmt.Println(feedback)
+			extractAndPrepareTransaction(cmd, args, func(transaction *archethic.TransactionBuilder, secretKey []byte, curve archethic.Curve, serviceMode bool, endpoint string, index int, serviceName string, storageNouncePublicKey string, seed []byte) (interface{}, error) {
+				return tuiutils.SendTransaction(transaction, secretKey, curve, serviceMode, endpoint, index, serviceName, storageNouncePublicKey, seed)
+			})
 		},
 	}
-	sendTransactionCmd.Flags().String("config", "", "The file location of the YAML configuration file")
-	sendTransactionCmd.Flags().Var(&endpoint, "endpoint", "Endpoint (local|testnet|mainnet|[custom url])")
-	sendTransactionCmd.Flags().String("access-seed", "", "Access Seed")
-	sendTransactionCmd.Flags().Bool("ssh", false, "Enable SSH key mode")
-	sendTransactionCmd.Flags().String("ssh-path", GetFirstSshKeyDefaultPath(), "Path to ssh key")
-	sendTransactionCmd.MarkFlagsMutuallyExclusive("access-seed", "ssh")
-	sendTransactionCmd.MarkFlagsMutuallyExclusive("access-seed", "ssh-path")
-	sendTransactionCmd.Flags().Int("index", 0, "Index")
-	sendTransactionCmd.Flags().Var(&ellipticCurve, "elliptic-curve", "Elliptic Curve (ED25519|P256|SECP256K1)")
-	sendTransactionCmd.Flags().Var(&transactionType, "transaction-type", "Transaction Type (keychain_access|keychain|transfer|hosting|token|data|contract|code_proposal|code_approval)")
-	sendTransactionCmd.Flags().StringToString("uco-transfer", map[string]string{}, "UCO Transfers (format: to=amount)")
-	sendTransactionCmd.Flags().StringToString("token-transfer", map[string]string{}, "Token Transfers (format: to=amount,token_address,token_id)")
-	sendTransactionCmd.Flags().StringSlice("recipients", []string{}, "Recipients")
-	sendTransactionCmd.Flags().StringToString("ownerships", map[string]string{}, "Ownerships (format: secret=authorization_key)")
-	sendTransactionCmd.Flags().String("content", "", "The file location of the content")
-	sendTransactionCmd.Flags().String("smart-contract", "", "The file location containing the smart Contract")
-	sendTransactionCmd.Flags().String("serviceName", "", "Service Name (required if creating a transaction for a service)")
+
+	setupTransactionFlags(sendTransactionCmd)
 	return sendTransactionCmd
+}
+
+func GetGetTransactionFeeCmd() *cobra.Command {
+	getTransactionFeeCmd := &cobra.Command{
+		Use:   "get-transaction-fee",
+		Short: "Get transaction fee",
+		Run: func(cmd *cobra.Command, args []string) {
+			extractAndPrepareTransaction(cmd, args, func(transaction *archethic.TransactionBuilder, secretKey []byte, curve archethic.Curve, serviceMode bool, endpoint string, index int, serviceName string, storageNouncePublicKey string, seed []byte) (interface{}, error) {
+				return tuiutils.GetTransactionFeeJson(transaction, secretKey, curve, serviceMode, endpoint, index, serviceName, storageNouncePublicKey, seed)
+			})
+		},
+	}
+
+	setupTransactionFlags(getTransactionFeeCmd)
+	return getTransactionFeeCmd
+}
+
+func setupTransactionFlags(cmd *cobra.Command) {
+	cmd.Flags().String("config", "", "The file location of the YAML configuration file")
+	cmd.Flags().Var(&endpoint, "endpoint", "Endpoint (local|testnet|mainnet|[custom url])")
+	cmd.Flags().String("access-seed", "", "Access Seed")
+	cmd.Flags().Bool("ssh", false, "Enable SSH key mode")
+	cmd.Flags().String("ssh-path", GetFirstSshKeyDefaultPath(), "Path to ssh key")
+	cmd.MarkFlagsMutuallyExclusive("access-seed", "ssh")
+	cmd.MarkFlagsMutuallyExclusive("access-seed", "ssh-path")
+	cmd.Flags().Int("index", 0, "Index")
+	cmd.Flags().Var(&ellipticCurve, "elliptic-curve", "Elliptic Curve (ED25519|P256|SECP256K1)")
+	cmd.Flags().Var(&transactionType, "transaction-type", "Transaction Type (keychain_access|keychain|transfer|hosting|token|data|contract|code_proposal|code_approval)")
+	cmd.Flags().StringToString("uco-transfer", map[string]string{}, "UCO Transfers (format: to=amount)")
+	cmd.Flags().StringToString("token-transfer", map[string]string{}, "Token Transfers (format: to=amount,token_address,token_id)")
+	cmd.Flags().StringSlice("recipients", []string{}, "Recipients")
+	cmd.Flags().StringToString("ownerships", map[string]string{}, "Ownerships (format: secret=authorization_key)")
+	cmd.Flags().String("content", "", "The file location of the content")
+	cmd.Flags().String("smart-contract", "", "The file location containing the smart Contract")
+	cmd.Flags().String("serviceName", "", "Service Name (required if creating a transaction for a service)")
 }

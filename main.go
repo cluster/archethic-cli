@@ -27,6 +27,7 @@ var rootCmd = &cobra.Command{
 func main() {
 	generateAddressCmd := cli.GetGenerateAddressCmd()
 	sendTransactionCmd := cli.GetSendTransactionCmd()
+	getTransactionFeeCmd := cli.GetGetTransactionFeeCmd()
 	createKeychainCmd := cli.GetCreateKeychainCmd()
 	getKeychainCmd := cli.GetKeychainCmd()
 	addServiceToKeychainCmd := cli.GetAddServiceToKeychainCmd()
@@ -34,6 +35,7 @@ func main() {
 
 	rootCmd.AddCommand(generateAddressCmd)
 	rootCmd.AddCommand(sendTransactionCmd)
+	rootCmd.AddCommand(getTransactionFeeCmd)
 	rootCmd.AddCommand(createKeychainCmd)
 	rootCmd.AddCommand(getKeychainCmd)
 	rootCmd.AddCommand(addServiceToKeychainCmd)
