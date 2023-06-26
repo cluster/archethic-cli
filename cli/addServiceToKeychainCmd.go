@@ -14,9 +14,9 @@ func GetAddServiceToKeychainCmd() *cobra.Command {
 		Run: func(cmd *cobra.Command, args []string) {
 			serviceName, _ := cmd.Flags().GetString("service-name")
 			derivationPath, _ := cmd.Flags().GetString("derivation-path")
-			err := validateRequiredFlags(cmd.Flags(), "ssh", "ssh-path", "access-seed")
+			err := validateRequiredFlags(cmd.Flags(), "ssh", "ssh-path", "access-seed", "mnemonic")
 			cobra.CheckErr(err)
-			accessSeedBytes, err := tuiutils.GetSeedBytes(cmd.Flags(), "ssh", "ssh-path", "access-seed")
+			accessSeedBytes, err := tuiutils.GetSeedBytes(cmd.Flags(), "ssh", "ssh-path", "access-seed", "mnemonic")
 			cobra.CheckErr(err)
 
 			// set default derivation path if not set
@@ -36,7 +36,11 @@ func GetAddServiceToKeychainCmd() *cobra.Command {
 	addServiceToKeychainCmd.Flags().String("derivation-path", "", "Derivation Path")
 	addServiceToKeychainCmd.Flags().Bool("ssh", false, "Enable SSH key mode")
 	addServiceToKeychainCmd.Flags().String("ssh-path", GetFirstSshKeyDefaultPath(), "Path to ssh key")
+	addServiceToKeychainCmd.Flags().Bool("mnemonic", false, "Enable mnemonic words for seed")
 	addServiceToKeychainCmd.MarkFlagsMutuallyExclusive("access-seed", "ssh")
 	addServiceToKeychainCmd.MarkFlagsMutuallyExclusive("access-seed", "ssh-path")
+	addServiceToKeychainCmd.MarkFlagsMutuallyExclusive("mnemonic", "ssh")
+	addServiceToKeychainCmd.MarkFlagsMutuallyExclusive("mnemonic", "ssh-path")
+	addServiceToKeychainCmd.MarkFlagsMutuallyExclusive("mnemonic", "access-seed")
 	return addServiceToKeychainCmd
 }

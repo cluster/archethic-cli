@@ -71,9 +71,10 @@ Send a transaction. It’s also possible to send a transaction for a specific se
 Arguments:
 - `--config` (string) the path of the yaml configuration file (see below for the explanation of the parameters), if the config flag is passed, the other flags will be ignored for the configuration of the transaction
 - `--endpoint`  (local|testnet|mainnet|[custom url]) the endpoint to use, you can write your own URL. Default value is `local`.
-- `--access-seed`(string) the access seed
-- `--ssh` (bool) enables ssh option for the seed. If the `--ssh-path` flag is not set, it tries to open the default key files: first `~/.ssh/id_ed25519` and if it doesn't exist, then it tries `~/.ssh/id_rsa`. If `--ssh-path` is passed, then provided value is used. If a passphrase is needed, a prompt will appear to enter it. Can't be set if `--access-seed` is set.
-- `--ssh-path` (string) path to ssh key to generate a seed, if a passphrase is needed, a prompt will appear to enter it. Can't be set if `--access-seed` is set.
+- `--access-seed`(string) the access seed. You can only pass either `--access-seed`, or a combination of `--ssh`/`--ssh-path` or `--mnemonic`.
+- `--ssh` (bool) enables ssh option for the seed. If the `--ssh-path` flag is not set, it tries to open the default key files: first `~/.ssh/id_ed25519` and if it doesn't exist, then it tries `~/.ssh/id_rsa`. If `--ssh-path` is passed, then provided value is used. If a passphrase is needed, a prompt will appear to enter it. You can only pass either `--access-seed`, or a combination of `--ssh`/`--ssh-path` or `--mnemonic`..
+- `--ssh-path` (string) path to ssh key to generate a seed, if a passphrase is needed, a prompt will appear to enter it. You can only pass either `--access-seed`, or a combination of `--ssh`/`--ssh-path` or `--mnemonic`..
+- `mnemonic` (boolean) enable use of mnemonic (BIP39) for seed. If set a prompt asking for the list of words is displayed (default is false). You can only pass either `--access-seed`, or a combination of `--ssh`/`--ssh-path` or `--mnemonic`.
 - `--index` (integer) the index of the new transaction. The default value is the last transaction index (which is fetched).
 - `--elliptic-curve` (ED25519|P256|SECP256K1) the elliptic curve. The default value is `ED25519`
 - `transaction-type`  (keychain_access|keychain|transfer|hosting|token|data|contract|code_proposal|code_approval) the transaction type. The default value is `transfer`.
@@ -83,8 +84,7 @@ Arguments:
 - `--ownerships` (secret(string)=authorization_key(string)) the ownerships. You can create several ownerships in a transaction by passing the `ownerships` flag several times. In the sent transaction, the ownerships will be grouped by `secret`.
 - `--content` (string) the path of the file containing the `content` of the transaction.
 - `--smart-contract` (string) the path of the file containing the `smart-contract` of the transaction.
-- `--serviceName` (string) the name of the service of the keychain you want to use to create the transaction
-- 
+- `--serviceName` (string) the name of the service of the keychain. You want to use to create the transaction
 
 YAML configuration file:
 
@@ -106,7 +106,7 @@ token_transfers:
     amount: 1
     token_id: 1
     token_address: 0000D574D171A484F8DEAC2D61FC3F7CC984BEB52465D69B3B5F670090742CBF5CCA
-smart_contract: >
+smart_contract: |
   condition inherit: [
     type: transfer,
       uco_transfers: %{
@@ -134,39 +134,43 @@ The flags are the same as those used for the `send-transaction` command.
 
 Arguments:
 - `--endpoint`  (local|testnet|mainnet|[custom url]) the endpoint to use, you can write your own URL. Default value is `local`.
-- `--access-seed`(string) the access seed of the keychain
-- `--ssh` (bool) enables ssh option for the seed. If the `--ssh-path` flag is not set, it tries to open the default key files: first `~/.ssh/id_ed25519` and if it doesn't exist, then it tries `~/.ssh/id_rsa`. If `--ssh-path` is passed, then provided value is used. If a passphrase is needed, a prompt will appear to enter it. Can't be set if `--access-seed` is set.
-- `--ssh-path` (string) path to ssh key to generate a seed, if a passphrase is needed, a prompt will appear to enter it. Can't be set if `--access-seed` is set.
+- `--access-seed`(string) the access seed of the keychain. You can only pass either `--access-seed`, or a combination of `--ssh`/`--ssh-path` or `--mnemonic`.
+- `--ssh` (bool) enables ssh option for the seed. If the `--ssh-path` flag is not set, it tries to open the default key files: first `~/.ssh/id_ed25519` and if it doesn't exist, then it tries `~/.ssh/id_rsa`. If `--ssh-path` is passed, then provided value is used. If a passphrase is needed, a prompt will appear to enter it. You can only pass either `--access-seed`, or a combination of `--ssh`/`--ssh-path` or `--mnemonic`.
+- `--ssh-path` (string) path to ssh key to generate a seed, if a passphrase is needed, a prompt will appear to enter it. You can only pass either `--access-seed`, or a combination of `--ssh`/`--ssh-path` or `--mnemonic`.
+- `mnemonic` (boolean) enable use of mnemonic (BIP39) for seed. If set a prompt asking for the list of words is displayed (default is false). You can only pass either `--access-seed`, or a combination of `--ssh`/`--ssh-path` or `--mnemonic`.
 
 #### Get keychain
 `get-keychain` access the details of the keychain (list of services)
 
 Arguments:
 - `--endpoint`  (local|testnet|mainnet|[custom url]) the endpoint to use, you can write your own URL. Default value is `local`.
-- `--access-seed`(string) the access seed of the keychain
-- `--ssh` (bool) enables ssh option for the seed. If the `--ssh-path` flag is not set, it tries to open the default key files: first `~/.ssh/id_ed25519` and if it doesn't exist, then it tries `~/.ssh/id_rsa`. If `--ssh-path` is passed, then provided value is used. If a passphrase is needed, a prompt will appear to enter it. Can't be set if `--access-seed` is set.
-- `--ssh-path` (string) path to ssh key to generate a seed, if a passphrase is needed, a prompt will appear to enter it. Can't be set if `--access-seed` is set.
+- `--access-seed`(string) the access seed of the keychain. You can only pass either `--access-seed`, or a combination of `--ssh`/`--ssh-path` or `--mnemonic`.
+- `--ssh` (bool) enables ssh option for the seed. If the `--ssh-path` flag is not set, it tries to open the default key files: first `~/.ssh/id_ed25519` and if it doesn't exist, then it tries `~/.ssh/id_rsa`. If `--ssh-path` is passed, then provided value is used. If a passphrase is needed, a prompt will appear to enter it. You can only pass either `--access-seed`, or a combination of `--ssh`/`--ssh-path` or `--mnemonic`.
+- `--ssh-path` (string) path to ssh key to generate a seed, if a passphrase is needed, a prompt will appear to enter it. You can only pass either `--access-seed`, or a combination of `--ssh`/`--ssh-path` or `--mnemonic`.
+- `mnemonic` (boolean) enable use of mnemonic (BIP39) for seed. If set a prompt asking for the list of words is displayed (default is false). You can only pass either `--access-seed`, or a combination of `--ssh`/`--ssh-path` or `--mnemonic`.
 
 #### Add service to keychain
 `add-service-to-keychain` add a service to a keychain
 
 Arguments:
 - `--endpoint`  (local|testnet|mainnet|[custom url]) the endpoint to use, you can write your own URL. Default value is `local`.
-- `--access-seed`(string) the access seed of the keychain
+- `--access-seed`(string) the access seed of the keychain. You can only pass either `--access-seed`, or a combination of `--ssh`/`--ssh-path` or `--mnemonic`.
 - `--service-name` (string) the name of the service to add
 - `--derivation-path` (string) the derivation path of the service to add
-- `--ssh` (bool) enables ssh option for the seed. If the `--ssh-path` flag is not set, it tries to open the default key files: first `~/.ssh/id_ed25519` and if it doesn't exist, then it tries `~/.ssh/id_rsa`. If `--ssh-path` is passed, then provided value is used. If a passphrase is needed, a prompt will appear to enter it. Can't be set if `--access-seed` is set.
-- `--ssh-path` (string) path to ssh key to generate a seed, if a passphrase is needed, a prompt will appear to enter it. Can't be set if `--access-seed` is set.
+- `--ssh` (bool) enables ssh option for the seed. If the `--ssh-path` flag is not set, it tries to open the default key files: first `~/.ssh/id_ed25519` and if it doesn't exist, then it tries `~/.ssh/id_rsa`. If `--ssh-path` is passed, then provided value is used. If a passphrase is needed, a prompt will appear to enter it. You can only pass either `--access-seed`, or a combination of `--ssh`/`--ssh-path` or `--mnemonic`.
+- `--ssh-path` (string) path to ssh key to generate a seed, if a passphrase is needed, a prompt will appear to enter it. You can only pass either `--access-seed`, or a combination of `--ssh`/`--ssh-path` or `--mnemonic`.
+- `mnemonic` (boolean) enable use of mnemonic (BIP39) for seed. If set a prompt asking for the list of words is displayed (default is false). You can only pass either `--access-seed`, or a combination of `--ssh`/`--ssh-path` or `--mnemonic`.
 
 #### Delete service from keychain
 `delete-service-from-keychain` delete a service from a keychain
 
 Arguments:
 - `--endpoint`  (local|testnet|mainnet|[custom url]) the endpoint to use, you can write your own URL. Default value is `local`.
-- `--access-seed`(string) the access seed of the keychain
+- `--access-seed`(string) the access seed of the keychain. You can only pass either `--access-seed`, or a combination of `--ssh`/`--ssh-path` or `--mnemonic`.
 - `--service-name` (string) the name of the service to delete
-- `--ssh` (bool) enables ssh option for the seed. If the `--ssh-path` flag is not set, it tries to open the default key files: first `~/.ssh/id_ed25519` and if it doesn't exist, then it tries `~/.ssh/id_rsa`. If `--ssh-path` is passed, then provided value is used. If a passphrase is needed, a prompt will appear to enter it. Can't be set if `--access-seed` is set.
-- `--ssh-path` (string) path to ssh key to generate a seed, if a passphrase is needed, a prompt will appear to enter it. Can't be set if `--access-seed` is set.
+- `--ssh` (bool) enables ssh option for the seed. If the `--ssh-path` flag is not set, it tries to open the default key files: first `~/.ssh/id_ed25519` and if it doesn't exist, then it tries `~/.ssh/id_rsa`. If `--ssh-path` is passed, then provided value is used. If a passphrase is needed, a prompt will appear to enter it. You can only pass either `--access-seed`, or a combination of `--ssh`/`--ssh-path` or `--mnemonic`.
+- `--ssh-path` (string) path to ssh key to generate a seed, if a passphrase is needed, a prompt will appear to enter it. You can only pass either `--access-seed`, or a combination of `--ssh`/`--ssh-path` or `--mnemonic`.
+- `mnemonic` (boolean) enable use of mnemonic (BIP39) for seed. If set a prompt asking for the list of words is displayed (default is false). You can only pass either `--access-seed`, or a combination of `--ssh`/`--ssh-path` or `--mnemonic`.
   
 ## License
 [AGPL-3](/LICENCE)

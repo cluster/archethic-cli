@@ -19,8 +19,11 @@ import (
 
 	archethic "github.com/archethic-foundation/libgo"
 	"github.com/spf13/pflag"
+	"github.com/tyler-smith/go-bip39"
+	"github.com/tyler-smith/go-bip39/wordlists"
 	"golang.org/x/crypto/ssh"
 	"golang.org/x/crypto/ssh/terminal"
+	"golang.org/x/text/unicode/norm"
 )
 
 func GetHashAlgorithmName(h archethic.HashAlgo) string {
@@ -309,7 +312,7 @@ func GetSSHPrivateKey(privateKeyPath string) ([]byte, error) {
 	pvKey, err := ssh.ParseRawPrivateKey(privateBytes)
 
 	if _, ok := err.(*ssh.PassphraseMissingError); ok {
-		passphrase := promptPassphrase(privateKeyPath)
+		passphrase := promptSecret(fmt.Sprintf("Enter passphrase for key '%s': ", privateKeyPath))
 		pvKey, err = ssh.ParseRawPrivateKeyWithPassphrase(privateBytes, []byte(passphrase))
 		if err != nil {
 			return nil, errors.New("Failed to parse private key: " + err.Error())
@@ -332,11 +335,11 @@ func GetSSHPrivateKey(privateKeyPath string) ([]byte, error) {
 
 }
 
-func promptPassphrase(privateKeyPath string) string {
-	fmt.Printf("Enter passphrase for key '%s': ", privateKeyPath)
+func promptSecret(message string) string {
+	fmt.Printf(message)
 	passphrase, err := terminal.ReadPassword(int(syscall.Stdin))
 	if err != nil {
-		log.Fatalf("Failed to read passphrase: %v", err)
+		log.Fatalf("Failed to read secret: %v", err)
 	}
 	fmt.Println()
 	return string(passphrase)
@@ -353,7 +356,21 @@ func GetLastTransactionIndex(url string, curve archethic.Curve, seed []byte) (in
 	return index, nil
 }
 
-func GetSeedBytes(flags *pflag.FlagSet, sshFlagKey, sshPathFlagKey, seedFlagKey string) ([]byte, error) {
+func GetSeedBytes(flags *pflag.FlagSet, sshFlagKey, sshPathFlagKey, seedFlagKey, mnemonicFlag string) ([]byte, error) {
+	// if the mnemonic flag is set, get the mnemonic words with a prompt
+	if mnemonicFlag != "" {
+		mnemonic, _ := flags.GetBool(mnemonicFlag)
+		if mnemonic {
+			words := promptSecret("Enter mnemonic mnemonic words:")
+			var err error
+			accessSeedBytes, err := ExtractSeedFromMnemonic(words)
+			if err != nil {
+				return nil, err
+			}
+			return accessSeedBytes, nil
+		}
+	}
+	// if the ssh flag is set, get the ssh key with a prompt
 	ssh, _ := flags.GetBool(sshFlagKey)
 	isSshPathSet := flags.Lookup(sshPathFlagKey).Changed
 	sshEnabled := ssh || isSshPathSet
@@ -377,11 +394,46 @@ func GetSeedBytes(flags *pflag.FlagSet, sshFlagKey, sshPathFlagKey, seedFlagKey 
 			return nil, err
 		}
 		return key, nil
-	} else {
-		if seedFlagKey == "" {
-			return nil, nil
-		}
-		accessSeed, _ := flags.GetString(seedFlagKey)
-		return archethic.MaybeConvertToHex(accessSeed)
 	}
+
+	// if no seedFlagKey is provided, return nil
+	if seedFlagKey == "" {
+		return nil, nil
+	}
+
+	// otherwise try to get the seed from the seedFlagKey
+	accessSeed, _ := flags.GetString(seedFlagKey)
+	// check if the provided seed looks like a mnemonic word list
+	potentialWordsList := strings.Fields(accessSeed)
+	if len(potentialWordsList) == 24 {
+		seed, err := ExtractSeedFromMnemonic(accessSeed)
+		if err == nil && seed != nil {
+			return seed, nil
+		}
+	}
+
+	return archethic.MaybeConvertToHex(accessSeed)
+}
+
+func ExtractSeedFromMnemonic(words string) ([]byte, error) {
+	// check if it's a bip39 word list in English
+	if bip39.IsMnemonicValid(words) {
+		seed, err := bip39.EntropyFromMnemonic(words)
+		if err != nil {
+			return nil, err
+		}
+		return seed, nil
+	}
+	// check if it's a bip39 word list in French
+	bip39.SetWordList(wordlists.French)
+	// normalize the string to NFD (as the bip39 French word list is in NFD)
+	nfd := norm.NFD.String(words)
+	if bip39.IsMnemonicValid(nfd) {
+		seed, err := bip39.EntropyFromMnemonic(nfd)
+		if err != nil {
+			return nil, err
+		}
+		return seed, nil
+	}
+	return nil, nil
 }
