@@ -122,9 +122,9 @@ func extractTransactionFromInputFlags(cmd *cobra.Command) (ConfiguredTransaction
 		smartContractStr = string(smartContractBytes)
 	}
 
-	err = validateRequiredFlags(cmd.Flags(), "ssh", "ssh-path", "access-seed", "bip39")
+	err = validateRequiredFlags(cmd.Flags(), "ssh", "ssh-path", "access-seed", "mnemonic")
 	cobra.CheckErr(err)
-	accessSeedBytes, err := tuiutils.GetSeedBytes(cmd.Flags(), "ssh", "ssh-path", "access-seed", "bip39")
+	accessSeedBytes, err := tuiutils.GetSeedBytes(cmd.Flags(), "ssh", "ssh-path", "access-seed", "mnemonic")
 	cobra.CheckErr(err)
 
 	return ConfiguredTransaction{
@@ -300,12 +300,12 @@ func setupTransactionFlags(cmd *cobra.Command) {
 	cmd.Flags().String("access-seed", "", "Access Seed")
 	cmd.Flags().Bool("ssh", false, "Enable SSH key mode")
 	cmd.Flags().String("ssh-path", GetFirstSshKeyDefaultPath(), "Path to ssh key")
-	cmd.Flags().Bool("bip39", false, "Enable BIP39 words for seed")
+	cmd.Flags().Bool("mnemonic", false, "Enable mnemonic words for seed")
 	cmd.MarkFlagsMutuallyExclusive("access-seed", "ssh")
 	cmd.MarkFlagsMutuallyExclusive("access-seed", "ssh-path")
-	cmd.MarkFlagsMutuallyExclusive("bip39", "ssh")
-	cmd.MarkFlagsMutuallyExclusive("bip39", "ssh-path")
-	cmd.MarkFlagsMutuallyExclusive("bip39", "access-seed")
+	cmd.MarkFlagsMutuallyExclusive("mnemonic", "ssh")
+	cmd.MarkFlagsMutuallyExclusive("mnemonic", "ssh-path")
+	cmd.MarkFlagsMutuallyExclusive("mnemonic", "access-seed")
 	cmd.Flags().Int("index", 0, "Index")
 	cmd.Flags().Var(&ellipticCurve, "elliptic-curve", "Elliptic Curve (ED25519|P256|SECP256K1)")
 	cmd.Flags().Var(&transactionType, "transaction-type", "Transaction Type (keychain_access|keychain|transfer|hosting|token|data|contract|code_proposal|code_approval)")

@@ -588,7 +588,7 @@ func urlView(m Model) string {
 func getAccessKey(m Model) ([]byte, error) {
 	potentialWordsList := strings.Fields(m.inputs[1].Value())
 	if len(potentialWordsList) == 24 {
-		seed, err := tuiutils.ExtractSeedFromBip39(m.inputs[1].Value())
+		seed, err := tuiutils.ExtractSeedFromMnemonic(m.inputs[1].Value())
 		if err != nil {
 			return nil, err
 		}

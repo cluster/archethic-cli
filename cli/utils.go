@@ -320,10 +320,10 @@ func (tt *TransactionTypeCLI) GetTransactionType() (archethic.TransactionType, e
 	}
 }
 
-func validateRequiredFlags(flags *pflag.FlagSet, sshFlagKey, sshPathFlagKey, seedKey, bip39Flag string) error {
+func validateRequiredFlags(flags *pflag.FlagSet, sshFlagKey, sshPathFlagKey, seedKey, mnemonicFlag string) error {
 	// validate if sshFlagKey or sshPathFlagKey or seedKey is set
-	if !flags.Changed(sshFlagKey) && !flags.Changed(sshPathFlagKey) && !flags.Changed(seedKey) && !flags.Changed(bip39Flag) {
-		errorMessage := fmt.Sprintf("required flag(s) \"%s\" or \"%s\" or \"%s\" or \"%s\" not set", sshFlagKey, sshPathFlagKey, seedKey, bip39Flag)
+	if !flags.Changed(sshFlagKey) && !flags.Changed(sshPathFlagKey) && !flags.Changed(seedKey) && !flags.Changed(mnemonicFlag) {
+		errorMessage := fmt.Sprintf("required flag(s) \"%s\" or \"%s\" or \"%s\" or \"%s\" not set", sshFlagKey, sshPathFlagKey, seedKey, mnemonicFlag)
 		return errors.New(errorMessage)
 	}
 	return nil

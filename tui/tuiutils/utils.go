@@ -356,19 +356,21 @@ func GetLastTransactionIndex(url string, curve archethic.Curve, seed []byte) (in
 	return index, nil
 }
 
-func GetSeedBytes(flags *pflag.FlagSet, sshFlagKey, sshPathFlagKey, seedFlagKey, bip39Flag string) ([]byte, error) {
-	if bip39Flag != "" {
-		bip39, _ := flags.GetBool(bip39Flag)
-		if bip39 {
-			words := promptSecret("Enter BIP39 mnemonic words:")
+func GetSeedBytes(flags *pflag.FlagSet, sshFlagKey, sshPathFlagKey, seedFlagKey, mnemonicFlag string) ([]byte, error) {
+	// if the mnemonic flag is set, get the mnemonic words with a prompt
+	if mnemonicFlag != "" {
+		mnemonic, _ := flags.GetBool(mnemonicFlag)
+		if mnemonic {
+			words := promptSecret("Enter mnemonic mnemonic words:")
 			var err error
-			accessSeedBytes, err := ExtractSeedFromBip39(words)
+			accessSeedBytes, err := ExtractSeedFromMnemonic(words)
 			if err != nil {
 				return nil, err
 			}
 			return accessSeedBytes, nil
 		}
 	}
+	// if the ssh flag is set, get the ssh key with a prompt
 	ssh, _ := flags.GetBool(sshFlagKey)
 	isSshPathSet := flags.Lookup(sshPathFlagKey).Changed
 	sshEnabled := ssh || isSshPathSet
@@ -392,16 +394,28 @@ func GetSeedBytes(flags *pflag.FlagSet, sshFlagKey, sshPathFlagKey, seedFlagKey,
 			return nil, err
 		}
 		return key, nil
-	} else {
-		if seedFlagKey == "" {
-			return nil, nil
-		}
-		accessSeed, _ := flags.GetString(seedFlagKey)
-		return archethic.MaybeConvertToHex(accessSeed)
 	}
+
+	// if no seedFlagKey is provided, return nil
+	if seedFlagKey == "" {
+		return nil, nil
+	}
+
+	// otherwise try to get the seed from the seedFlagKey
+	accessSeed, _ := flags.GetString(seedFlagKey)
+	// check if the provided seed looks like a mnemonic word list
+	potentialWordsList := strings.Fields(accessSeed)
+	if len(potentialWordsList) == 24 {
+		seed, err := ExtractSeedFromMnemonic(accessSeed)
+		if err == nil && seed != nil {
+			return seed, nil
+		}
+	}
+
+	return archethic.MaybeConvertToHex(accessSeed)
 }
 
-func ExtractSeedFromBip39(words string) ([]byte, error) {
+func ExtractSeedFromMnemonic(words string) ([]byte, error) {
 	// check if it's a bip39 word list in English
 	if bip39.IsMnemonicValid(words) {
 		seed, err := bip39.EntropyFromMnemonic(words)
