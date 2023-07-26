@@ -146,7 +146,7 @@ func numberValidator(s string) error {
 	if s == "" {
 		return nil
 	}
-	_, err := strconv.ParseInt(s, 10, 32)
+	_, err := strconv.ParseFloat(s, 64)
 	return err
 }
 

@@ -3,6 +3,7 @@ package cli
 import (
 	"errors"
 	"fmt"
+	"math"
 	"net/url"
 	"os"
 
@@ -332,4 +333,12 @@ func validateRequiredFlags(flags *pflag.FlagSet, sshFlagKey, sshPathFlagKey, see
 func GetFirstSshKeyDefaultPath() string {
 	home, _ := os.UserHomeDir()
 	return home + "/.ssh/id_ed25519"
+}
+
+func ToBigInt(number float64, decimals int) uint64 {
+	return uint64(number * math.Pow(10, float64(decimals)))
+}
+
+func FromBigInt(number uint64, decimals int) float64 {
+	return float64(number) / math.Pow(10, float64(decimals))
 }
