@@ -3,6 +3,7 @@ package cli
 import (
 	"crypto/rand"
 	"encoding/hex"
+	"errors"
 	"fmt"
 	"os"
 	"strconv"
@@ -123,9 +124,12 @@ func extractTransactionFromInputFlags(cmd *cobra.Command) (ConfiguredTransaction
 	}
 
 	err = validateRequiredFlags(cmd.Flags(), "ssh", "ssh-path", "access-seed", "mnemonic")
-	cobra.CheckErr(err)
-	accessSeedBytes, err := tuiutils.GetSeedBytes(cmd.Flags(), "ssh", "ssh-path", "access-seed", "mnemonic")
-	cobra.CheckErr(err)
+	var accessSeedBytes []byte
+	// if no flag have been passed to configure the accessSeed, maybe the config is set in the config file
+	if err == nil {
+		accessSeedBytes, err = tuiutils.GetSeedBytes(cmd.Flags(), "ssh", "ssh-path", "access-seed", "mnemonic")
+		cobra.CheckErr(err)
+	}
 
 	return ConfiguredTransaction{
 		accessSeed:     accessSeedBytes,
@@ -138,6 +142,47 @@ func extractTransactionFromInputFlags(cmd *cobra.Command) (ConfiguredTransaction
 		smartContract:  smartContractStr,
 		serviceName:    serviceName,
 	}, nil
+}
+
+// override file configuration by flag configuration
+func combineTransactions(fileConfig ConfiguredTransaction, flagConfig ConfiguredTransaction) ConfiguredTransaction {
+	if flagConfig.index != 0 {
+		fileConfig.index = flagConfig.index
+	}
+
+	if len(flagConfig.ucoTransfers) > 0 {
+		fileConfig.ucoTransfers = flagConfig.ucoTransfers
+	}
+
+	if len(flagConfig.tokenTransfers) > 0 {
+		fileConfig.tokenTransfers = flagConfig.tokenTransfers
+	}
+
+	if len(flagConfig.recipients) > 0 {
+		fileConfig.recipients = flagConfig.recipients
+	}
+
+	if len(flagConfig.ownerships) > 0 {
+		fileConfig.ownerships = flagConfig.ownerships
+	}
+
+	if len(flagConfig.content) > 0 {
+		fileConfig.content = flagConfig.content
+	}
+
+	if flagConfig.smartContract != "" {
+		fileConfig.smartContract = flagConfig.smartContract
+	}
+
+	if flagConfig.serviceName != "" {
+		fileConfig.serviceName = flagConfig.serviceName
+	}
+
+	if len(flagConfig.accessSeed) != 0 {
+		fileConfig.accessSeed = flagConfig.accessSeed
+	}
+
+	return fileConfig
 }
 
 func configureTransaction(configuredTransaction ConfiguredTransaction, txType archethic.TransactionType, secretKey []byte) (*archethic.TransactionBuilder, error) {
@@ -225,15 +270,20 @@ func extractAndPrepareTransaction(cmd *cobra.Command, args []string, action func
 	rand.Read(secretKey)
 
 	config, _ := cmd.Flags().GetString("config")
-	var configuredTransaction ConfiguredTransaction
+	var fileConfig, flagConfig, configuredTransaction ConfiguredTransaction
 	var err error
 	if config != "" {
-		configuredTransaction, err = extractTransactionFromInputFile(config)
-		cobra.CheckErr(err)
-	} else {
-		configuredTransaction, err = extractTransactionFromInputFlags(cmd)
+		fileConfig, err = extractTransactionFromInputFile(config)
 		cobra.CheckErr(err)
 	}
+	flagConfig, err = extractTransactionFromInputFlags(cmd)
+	cobra.CheckErr(err)
+
+	// merging the config based on file with the one based on flags
+	configuredTransaction = combineTransactions(fileConfig, flagConfig)
+
+	err = checkAccessSeed(configuredTransaction.accessSeed)
+	cobra.CheckErr(err)
 
 	curve, err := ellipticCurve.GetCurve()
 	cobra.CheckErr(err)
@@ -316,4 +366,11 @@ func setupTransactionFlags(cmd *cobra.Command) {
 	cmd.Flags().String("content", "", "The file location of the content")
 	cmd.Flags().String("smart-contract", "", "The file location containing the smart Contract")
 	cmd.Flags().String("serviceName", "", "Service Name (required if creating a transaction for a service)")
+}
+
+func checkAccessSeed(accessSeed []byte) error {
+	if len(accessSeed) == 0 {
+		return errors.New("access seed configuration error, maybe you haven't passed one of the following fields: ssh, ssh-path, access-seed, mnemonic")
+	}
+	return nil
 }

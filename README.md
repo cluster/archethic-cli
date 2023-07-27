@@ -69,7 +69,7 @@ Arguments:
 Send a transaction. It’s also possible to send a transaction for a specific service of a keychain (by passing the service parameter). You can either pass the parameter as flags in the command line or decide to put the parameters in a YAML file and pass the path of the config file using the `config` flag.
 
 Arguments:
-- `--config` (string) the path of the yaml configuration file (see below for the explanation of the parameters), if the config flag is passed, the other flags will be ignored for the configuration of the transaction
+- `--config` (string) the path of the yaml configuration file (see below for the explanation of the parameters). It is possible to use a combination of configuration with a file and flags (the flags are described below). But if a given value is defined both in the file and a flag, the value from the file will be ignored.
 - `--endpoint`  (local|testnet|mainnet|[custom url]) the endpoint to use, you can write your own URL. Default value is `local`.
 - `--access-seed`(string) the access seed. You can only pass either `--access-seed`, or a combination of `--ssh`/`--ssh-path` or `--mnemonic`.
 - `--ssh` (bool) enables ssh option for the seed. If the `--ssh-path` flag is not set, it tries to open the default key files: first `~/.ssh/id_ed25519` and if it doesn't exist, then it tries `~/.ssh/id_rsa`. If `--ssh-path` is passed, then provided value is used. If a passphrase is needed, a prompt will appear to enter it. You can only pass either `--access-seed`, or a combination of `--ssh`/`--ssh-path` or `--mnemonic`..
