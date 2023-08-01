@@ -34,15 +34,15 @@ type SendTransactionData struct {
 }
 
 type UCOTransfer struct {
-	To     string `yaml:"to"`
-	Amount uint64 `yaml:"amount"`
+	To     string  `yaml:"to"`
+	Amount float64 `yaml:"amount"`
 }
 
 type TokenTransfer struct {
-	To           string `yaml:"to"`
-	Amount       uint64 `yaml:"amount"`
-	TokenAddress string `yaml:"token_address"`
-	TokenID      int    `yaml:"token_id"`
+	To           string  `yaml:"to"`
+	Amount       float64 `yaml:"amount"`
+	TokenAddress string  `yaml:"token_address"`
+	TokenID      int     `yaml:"token_id"`
 }
 
 type Ownership struct {

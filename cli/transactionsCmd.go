@@ -58,7 +58,7 @@ func extractTransactionFromInputFlags(cmd *cobra.Command) (ConfiguredTransaction
 		if err != nil {
 			return ConfiguredTransaction{}, err
 		}
-		amountInt, err := strconv.ParseUint(amount, 10, 64)
+		amountInt, err := strconv.ParseFloat(amount, 64)
 		if err != nil {
 			return ConfiguredTransaction{}, err
 		}
@@ -73,7 +73,7 @@ func extractTransactionFromInputFlags(cmd *cobra.Command) (ConfiguredTransaction
 	var tokenTransfers []TokenTransfer
 	for to, values := range tokenTransfersStr {
 		value := strings.Split(values, ",")
-		amountInt, err := strconv.ParseUint(value[0], 10, 64)
+		amountInt, err := strconv.ParseFloat(value[0], 64)
 		if err != nil {
 			return ConfiguredTransaction{}, err
 		}
@@ -150,7 +150,7 @@ func configureTransaction(configuredTransaction ConfiguredTransaction, txType ar
 		if err != nil {
 			return nil, err
 		}
-		transaction.AddUcoTransfer(toBytes, ucoTransfer.Amount*1e8)
+		transaction.AddUcoTransfer(toBytes, ToBigInt(ucoTransfer.Amount, 8))
 	}
 
 	// set token transfers
@@ -164,7 +164,7 @@ func configureTransaction(configuredTransaction ConfiguredTransaction, txType ar
 		if err != nil {
 			return nil, err
 		}
-		transaction.AddTokenTransfer(toBytes, tokenAddress, tokenTransfer.Amount*1e8, tokenTransfer.TokenID)
+		transaction.AddTokenTransfer(toBytes, tokenAddress, ToBigInt(tokenTransfer.Amount, 8), tokenTransfer.TokenID)
 	}
 
 	// set recipients
