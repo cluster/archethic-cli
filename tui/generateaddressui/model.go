@@ -9,6 +9,8 @@ import (
 
 	"github.com/archethic-foundation/archethic-cli/tui/tuiutils"
 	archethic "github.com/archethic-foundation/libgo"
+	"github.com/charmbracelet/bubbles/help"
+	"github.com/charmbracelet/bubbles/key"
 	"github.com/charmbracelet/bubbles/textinput"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
@@ -34,11 +36,15 @@ type Model struct {
 	inputs           []textinput.Model
 	generatedAddress string
 	feedback         string
+	KeyMap           KeyMap
+	Help             help.Model
 }
 
 func New() Model {
 	m := Model{
 		inputs: make([]textinput.Model, 4),
+		KeyMap: DefaultKeyMap(),
+		Help:   help.New(),
 	}
 
 	var t textinput.Model
@@ -197,6 +203,33 @@ func (m *Model) updateInputs(msg tea.Msg) tea.Cmd {
 	return tea.Batch(cmds...)
 }
 
+// ShortHelp returns bindings to show in the abbreviated help view. It's part
+// of the help.KeyMap interface.
+func (m Model) ShortHelp() []key.Binding {
+	return []key.Binding{
+		m.KeyMap.CursorUp,
+		m.KeyMap.CursorDown,
+		m.KeyMap.Enter,
+		m.KeyMap.Esc,
+		m.KeyMap.ForceQuit,
+	}
+}
+
+// FullHelp returns bindings to show the full help view. It's part of the
+// help.KeyMap interface.
+func (m Model) FullHelp() [][]key.Binding {
+	kb := [][]key.Binding{{
+		m.KeyMap.CursorUp,
+		m.KeyMap.CursorDown,
+		m.KeyMap.Enter,
+		m.KeyMap.Esc,
+		m.KeyMap.ForceQuit,
+	}}
+
+	return append(kb,
+		[]key.Binding{})
+}
+
 func (m Model) View() string {
 	var b strings.Builder
 
@@ -233,7 +266,7 @@ func (m Model) View() string {
 		b.WriteString("The generated address is: " + m.generatedAddress)
 	}
 	b.WriteString("\n\n")
-	b.WriteString(helpStyle.Render("press 'esc' to go back "))
+	b.WriteString(helpStyle.Render(m.Help.View(m)))
 
 	return b.String()
 }

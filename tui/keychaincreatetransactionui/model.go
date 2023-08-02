@@ -10,6 +10,8 @@ import (
 
 	"github.com/archethic-foundation/archethic-cli/tui/tuiutils"
 	archethic "github.com/archethic-foundation/libgo"
+	"github.com/charmbracelet/bubbles/help"
+	"github.com/charmbracelet/bubbles/key"
 	"github.com/charmbracelet/bubbles/spinner"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
@@ -101,6 +103,8 @@ type Model struct {
 	Spinner                spinner.Model
 	IsInit                 bool
 	pvKeyBytes             []byte
+	KeyMap                 KeyMap
+	Help                   help.Model
 }
 
 func New(pvKeyBytes []byte) Model {
@@ -115,6 +119,8 @@ func New(pvKeyBytes []byte) Model {
 		secretKey:   key,
 		Spinner:     s,
 		pvKeyBytes:  pvKeyBytes,
+		KeyMap:      DefaultKeyMap(),
+		Help:        help.New(),
 	}
 
 	m.Tabs = []string{"Main", "UCO Transfers", "Token Transfers", "Recipients", "Ownerships", "Content", "Smart Contract"}
@@ -255,8 +261,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case UpdateSmartContract:
 		m.transaction.SetCode(msg.Code)
 	case tea.KeyMsg:
-		switch keypress := msg.String(); keypress {
-		case "esc":
+		switch {
+		case key.Matches(msg, m.KeyMap.Esc):
 			if m.activeTab == SMART_CONTRACT_TAB && m.smartContractModel.smartContractTextAreaInput.Focused() {
 				w, cmds := m.smartContractModel.Update(msg)
 				m.smartContractModel = w.(SmartContractModel)
@@ -270,9 +276,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					return BackMsg(true)
 				}
 			}
-		case "ctrl+c":
+		case key.Matches(msg, m.KeyMap.ForceQuit):
 			return m, tea.Quit
-		case "right", "tab":
+		case key.Matches(msg, m.KeyMap.CursorRight):
 			// switch to the next tab except if the user is editing the content or the smart contract
 			if (m.activeTab == CONTENT_TAB && !m.contentModel.contentTextAreaInput.Focused()) ||
 				(m.activeTab == SMART_CONTRACT_TAB && !m.smartContractModel.smartContractTextAreaInput.Focused()) ||
@@ -289,7 +295,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				return m, cmds
 			}
 
-		case "left", "shift+tab":
+		case key.Matches(msg, m.KeyMap.CursorLeft):
 			// switch to the previous tab except if the user is editing the content or the smart contract
 			if (m.activeTab == CONTENT_TAB && !m.contentModel.contentTextAreaInput.Focused()) ||
 				(m.activeTab == SMART_CONTRACT_TAB && !m.smartContractModel.smartContractTextAreaInput.Focused()) ||
@@ -455,8 +461,40 @@ func (m Model) View() string {
 	tabContent = b.String()
 	doc.WriteString(windowStyle.Width((lipgloss.Width(row) - windowStyle.GetHorizontalFrameSize())).Render(tabContent))
 	doc.WriteString("\n\n")
-	doc.WriteString(helpStyle.Render("press 'esc' to go back "))
+
+	doc.WriteString(helpStyle.Render(m.Help.View(m)))
 	return docStyle.Render(doc.String())
+}
+
+// ShortHelp returns bindings to show in the abbreviated help view. It's part
+// of the help.KeyMap interface.
+func (m Model) ShortHelp() []key.Binding {
+	return []key.Binding{
+		m.KeyMap.CursorUp,
+		m.KeyMap.CursorDown,
+		m.KeyMap.CursorLeft,
+		m.KeyMap.CursorRight,
+		m.KeyMap.Enter,
+		m.KeyMap.Esc,
+		m.KeyMap.ForceQuit,
+	}
+}
+
+// FullHelp returns bindings to show the full help view. It's part of the
+// help.KeyMap interface.
+func (m Model) FullHelp() [][]key.Binding {
+	kb := [][]key.Binding{{
+		m.KeyMap.CursorUp,
+		m.KeyMap.CursorDown,
+		m.KeyMap.CursorLeft,
+		m.KeyMap.CursorRight,
+		m.KeyMap.Enter,
+		m.KeyMap.Esc,
+		m.KeyMap.ForceQuit,
+	}}
+
+	return append(kb,
+		[]key.Binding{})
 }
 
 func max(a, b int) int {
