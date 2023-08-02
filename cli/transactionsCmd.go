@@ -15,22 +15,19 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
-func extractTransactionFromInputFile(config string) (ConfiguredTransaction, error) {
+func extractTransactionFromInputFile(config string) (ConfiguredTransaction, SendTransactionData, error) {
 	configBytes, err := os.ReadFile(config)
 	if err != nil {
-		return ConfiguredTransaction{}, err
+		return ConfiguredTransaction{}, SendTransactionData{}, err
 	}
 	var data SendTransactionData
 	err = yaml.Unmarshal(configBytes, &data)
 	if err != nil {
-		return ConfiguredTransaction{}, err
+		return ConfiguredTransaction{}, SendTransactionData{}, err
 	}
-	endpoint.Set(data.Endpoint)
-	ellipticCurve.Set(data.EllipticCurve)
-	transactionType.Set(data.TransactionType)
 	seedByte, err := archethic.MaybeConvertToHex(data.AccessSeed)
 	if err != nil {
-		return ConfiguredTransaction{}, err
+		return ConfiguredTransaction{}, data, err
 	}
 	return ConfiguredTransaction{
 		accessSeed:     seedByte,
@@ -42,7 +39,7 @@ func extractTransactionFromInputFile(config string) (ConfiguredTransaction, erro
 		content:        []byte(data.Content),
 		smartContract:  data.SmartContract,
 		serviceName:    data.ServiceName,
-	}, nil
+	}, data, nil
 
 }
 
@@ -271,9 +268,19 @@ func extractAndPrepareTransaction(cmd *cobra.Command, args []string, action func
 
 	config, _ := cmd.Flags().GetString("config")
 	var fileConfig, flagConfig, configuredTransaction ConfiguredTransaction
+	var sendTransactionData SendTransactionData
 	var err error
 	if config != "" {
-		fileConfig, err = extractTransactionFromInputFile(config)
+		fileConfig, sendTransactionData, err = extractTransactionFromInputFile(config)
+		if sendTransactionData.Endpoint != "" {
+			endpoint.Set(sendTransactionData.Endpoint)
+		}
+		if sendTransactionData.EllipticCurve != "" {
+			ellipticCurve.Set(sendTransactionData.EllipticCurve)
+		}
+		if sendTransactionData.TransactionType != "" {
+			transactionType.Set(sendTransactionData.TransactionType)
+		}
 		cobra.CheckErr(err)
 	}
 	flagConfig, err = extractTransactionFromInputFlags(cmd)
