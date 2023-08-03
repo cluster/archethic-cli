@@ -37,6 +37,17 @@ func (m SmartContractModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.smartContractTextAreaInput.Blur()
 			}
 			return m, nil
+		// this is used to get a faster paste
+		case "ctrl+v":
+
+			if !m.smartContractTextAreaInput.Focused() {
+				m.smartContractTextAreaInput.Focus()
+			}
+			newText := textarea.Paste()
+			m.smartContractTextAreaInput, _ = m.smartContractTextAreaInput.Update(newText)
+			return m, func() tea.Msg {
+				return UpdateSmartContract{Code: m.smartContractTextAreaInput.Value()}
+			}
 		default:
 
 			if !m.smartContractTextAreaInput.Focused() {

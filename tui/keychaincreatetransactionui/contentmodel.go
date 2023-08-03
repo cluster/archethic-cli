@@ -40,6 +40,18 @@ func (m ContentModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 			return m, nil
 
+		// this is used to get a faster paste
+		case "ctrl+v":
+
+			if !m.contentTextAreaInput.Focused() {
+				m.contentTextAreaInput.Focus()
+			}
+			newText := textarea.Paste()
+			m.contentTextAreaInput, _ = m.contentTextAreaInput.Update(newText)
+			return m, func() tea.Msg {
+				return UpdateSmartContract{Code: m.contentTextAreaInput.Value()}
+			}
+
 		default:
 
 			if !m.contentTextAreaInput.Focused() {
