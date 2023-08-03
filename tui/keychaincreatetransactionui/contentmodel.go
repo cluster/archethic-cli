@@ -1,14 +1,21 @@
 package keychaincreatetransactionui
 
 import (
+	"fmt"
 	"strings"
 
 	"github.com/charmbracelet/bubbles/textarea"
 	tea "github.com/charmbracelet/bubbletea"
 )
 
+var (
+	focusedPasteContentButton = focusedStyle.Copy().Render("[ Paste ]")
+	blurredPasteContentButton = fmt.Sprintf("[ %s ]", blurredStyle.Render("Paste"))
+)
+
 type ContentModel struct {
 	contentTextAreaInput textarea.Model
+	focusInput           int
 }
 
 type UpdateContent struct {
@@ -40,31 +47,56 @@ func (m ContentModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 			return m, nil
 
-		// this is used to get a faster paste
-		case "ctrl+v":
-
+		case "up", "down":
 			if !m.contentTextAreaInput.Focused() {
-				m.contentTextAreaInput.Focus()
-			}
-			newText := textarea.Paste()
-			m.contentTextAreaInput, _ = m.contentTextAreaInput.Update(newText)
-			return m, func() tea.Msg {
-				return UpdateSmartContract{Code: m.contentTextAreaInput.Value()}
+				updateContentFocusInput(&m, keypress)
+			} else {
+				return updateContentValue(&m, msg)
 			}
 
+		case "enter":
+			if m.focusInput == 1 {
+				if !m.contentTextAreaInput.Focused() {
+					m.contentTextAreaInput.Focus()
+					m.focusInput = 0
+				}
+
+				newText := textarea.Paste()
+				return updateContentValue(&m, newText)
+			} else {
+				return updateContentValue(&m, msg)
+			}
 		default:
 
 			if !m.contentTextAreaInput.Focused() {
 				m.contentTextAreaInput.Focus()
+				m.focusInput = 0
 			}
-			m.contentTextAreaInput, _ = m.contentTextAreaInput.Update(msg)
-			return m, func() tea.Msg {
-				return UpdateContent{Content: []byte(m.contentTextAreaInput.Value())}
-			}
-
+			return updateContentValue(&m, msg)
 		}
 	}
+
 	return m, nil
+}
+
+func updateContentValue(m *ContentModel, msg tea.Msg) (ContentModel, func() tea.Msg) {
+	m.contentTextAreaInput, _ = m.contentTextAreaInput.Update(msg)
+	return *m, func() tea.Msg {
+		return UpdateContent{Content: []byte(m.contentTextAreaInput.Value())}
+	}
+}
+
+func updateContentFocusInput(m *ContentModel, keypress string) {
+	if keypress == "up" {
+		m.focusInput--
+	} else {
+		m.focusInput++
+	}
+	if m.focusInput > 1 {
+		m.focusInput = 0
+	} else if m.focusInput < 0 {
+		m.focusInput = 1
+	}
 }
 
 func (m *ContentModel) SwitchTab() (ContentModel, []tea.Cmd) {
@@ -79,6 +111,10 @@ func (m ContentModel) View() string {
 	if m.contentTextAreaInput.Focused() {
 		b.WriteString(helpStyle.Render("\npress 'esc' to exit edit mode "))
 	}
-
+	button := &blurredPasteContentButton
+	if m.focusInput == 1 {
+		button = &focusedPasteContentButton
+	}
+	fmt.Fprintf(&b, "\n\n%s\n\n", *button)
 	return b.String()
 }
