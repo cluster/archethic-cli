@@ -26,6 +26,8 @@ func NewSmartContractModel() SmartContractModel {
 	m := SmartContractModel{}
 	m.smartContractTextAreaInput = textarea.New()
 	m.smartContractTextAreaInput.CharLimit = 0
+	m.smartContractTextAreaInput.MaxHeight = 0
+	m.smartContractTextAreaInput.SetHeight(20)
 	m.smartContractTextAreaInput.SetWidth(150)
 	return m
 }
@@ -52,7 +54,16 @@ func (m SmartContractModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				return updateSmartContractValue(&m, msg)
 			}
 
+		case "ctrl+v", "ctrl+shift+v":
+
+			if !m.smartContractTextAreaInput.Focused() {
+				m.smartContractTextAreaInput.Focus()
+				m.focusInput = 0
+			}
+			newText := textarea.Paste()
+			return updateSmartContractValue(&m, newText)
 		case "enter":
+			// Paste button
 			if m.focusInput == 1 {
 				if !m.smartContractTextAreaInput.Focused() {
 					m.smartContractTextAreaInput.Focus()

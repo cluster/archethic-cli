@@ -26,6 +26,8 @@ func NewContentModel() ContentModel {
 	m := ContentModel{}
 	m.contentTextAreaInput = textarea.New()
 	m.contentTextAreaInput.CharLimit = 0
+	m.contentTextAreaInput.MaxHeight = 0
+	m.contentTextAreaInput.SetHeight(20)
 	m.contentTextAreaInput.SetWidth(150)
 
 	return m
@@ -54,7 +56,17 @@ func (m ContentModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				return updateContentValue(&m, msg)
 			}
 
+		case "ctrl+v", "ctrl+shift+v":
+			if !m.contentTextAreaInput.Focused() {
+				m.contentTextAreaInput.Focus()
+				m.focusInput = 0
+			}
+
+			newText := textarea.Paste()
+			return updateContentValue(&m, newText)
+
 		case "enter":
+			// Paste button
 			if m.focusInput == 1 {
 				if !m.contentTextAreaInput.Focused() {
 					m.contentTextAreaInput.Focus()
