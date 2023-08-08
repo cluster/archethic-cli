@@ -28,7 +28,7 @@ cd archethic-cli
 go build .
 ```
 
-Please note that you would need to install a clipboard utility if you want to be able to paste text/code (like xsel, xclip, wl-clipboard or Termux).
+On UNIX system, please note that you would need to install a clipboard utility if you want to be able to paste text/code (like xsel, xclip, wl-clipboard or Termux).
 
 ## Usage
 
