@@ -361,7 +361,7 @@ func GetSeedBytes(flags *pflag.FlagSet, sshFlagKey, sshPathFlagKey, seedFlagKey,
 	if mnemonicFlag != "" {
 		mnemonic, _ := flags.GetBool(mnemonicFlag)
 		if mnemonic {
-			words := promptSecret("Enter mnemonic mnemonic words:")
+			words := promptSecret("Enter mnemonic words:")
 			var err error
 			accessSeedBytes, err := ExtractSeedFromMnemonic(words)
 			if err != nil {
