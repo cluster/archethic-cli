@@ -78,8 +78,8 @@ Arguments:
 - `--index` (integer) the index of the new transaction. The default value is the last transaction index (which is fetched).
 - `--elliptic-curve` (ED25519|P256|SECP256K1) the elliptic curve. The default value is `ED25519`
 - `transaction-type`  (keychain_access|keychain|transfer|hosting|token|data|contract|code_proposal|code_approval) the transaction type. The default value is `transfer`.
-- `--uco-transfer` (destinationAddress(string)=amount(integer)) the UCO transfers. You can create several UCO transfers in a transaction by passing the `uco-transfer` flag several times. The amount passed will be multiplied by 10^8.
-- `--token-transfer`  (to(string)=amount(integer),token_address(string),token_id(integer)) the token transfers. You can create several token transfers in a transaction by passing the `token-transfer` flag several times. The amount passed will be multiplied by 10^8.
+- `--uco-transfer` (destinationAddress(string)=amount(float)) the UCO transfers. You can create several UCO transfers in a transaction by passing the `uco-transfer` flag several times. The amount passed will be multiplied by 10^8.
+- `--token-transfer`  (to(string)=amount(float),token_address(string),token_id(integer)) the token transfers. You can create several token transfers in a transaction by passing the `token-transfer` flag several times. The amount passed will be multiplied by 10^8.
 - `--recipients` (string) the recipients. You can create several recipients in a transaction by passing the `recipients` flag several times. 
 - `--ownerships` (secret(string)=authorization_key(string)) the ownerships. You can create several ownerships in a transaction by passing the `ownerships` flag several times. In the sent transaction, the ownerships will be grouped by `secret`.
 - `--content` (string) the path of the file containing the `content` of the transaction.
