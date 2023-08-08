@@ -225,7 +225,11 @@ func GetTransactionFee(transaction *archethic.TransactionBuilder, secretKey []by
 		return archethic.Fee{}, err
 	}
 	client := archethic.NewAPIClient(endpoint)
-	return client.GetTransactionFee(transaction)
+	fee, err := client.GetTransactionFee(transaction)
+	if err != nil {
+		return archethic.Fee{}, handleTransactionError(err)
+	}
+	return fee, nil
 }
 
 func buildTransactionToSend(transaction *archethic.TransactionBuilder, secretKey []byte, curve archethic.Curve, serviceMode bool, endpoint string, transactionIndex int, serviceName string, storageNouncePublicKey string, seed []byte) error {
