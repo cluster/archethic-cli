@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/atotto/clipboard"
 	"github.com/charmbracelet/bubbles/textarea"
 	tea "github.com/charmbracelet/bubbletea"
 )
@@ -16,6 +17,7 @@ var (
 type ContentModel struct {
 	contentTextAreaInput textarea.Model
 	focusInput           int
+	enablePaste          bool
 }
 
 type UpdateContent struct {
@@ -29,7 +31,12 @@ func NewContentModel() ContentModel {
 	m.contentTextAreaInput.MaxHeight = 0
 	m.contentTextAreaInput.SetHeight(20)
 	m.contentTextAreaInput.SetWidth(150)
-
+	_, err := clipboard.ReadAll()
+	if err != nil {
+		m.enablePaste = false
+	} else {
+		m.enablePaste = true
+	}
 	return m
 }
 
@@ -50,24 +57,15 @@ func (m ContentModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, nil
 
 		case "up", "down":
-			if !m.contentTextAreaInput.Focused() {
+			if !m.contentTextAreaInput.Focused() && m.enablePaste {
 				updateContentFocusInput(&m, keypress)
 			} else {
 				return updateContentValue(&m, msg)
 			}
 
-		case "ctrl+v", "ctrl+shift+v":
-			if !m.contentTextAreaInput.Focused() {
-				m.contentTextAreaInput.Focus()
-				m.focusInput = 0
-			}
-
-			newText := textarea.Paste()
-			return updateContentValue(&m, newText)
-
 		case "enter":
 			// Paste button
-			if m.focusInput == 1 {
+			if m.focusInput == 1 && m.enablePaste {
 				if !m.contentTextAreaInput.Focused() {
 					m.contentTextAreaInput.Focus()
 					m.focusInput = 0
@@ -127,6 +125,8 @@ func (m ContentModel) View() string {
 	if m.focusInput == 1 {
 		button = &focusedPasteContentButton
 	}
-	fmt.Fprintf(&b, "\n\n%s\n\n", *button)
+	if m.enablePaste {
+		fmt.Fprintf(&b, "\n\n%s\n\n", *button)
+	}
 	return b.String()
 }

@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/atotto/clipboard"
 	"github.com/charmbracelet/bubbles/textarea"
 	tea "github.com/charmbracelet/bubbletea"
 )
@@ -16,6 +17,7 @@ var (
 type SmartContractModel struct {
 	smartContractTextAreaInput textarea.Model
 	focusInput                 int
+	enablePaste                bool
 }
 
 type UpdateSmartContract struct {
@@ -29,6 +31,12 @@ func NewSmartContractModel() SmartContractModel {
 	m.smartContractTextAreaInput.MaxHeight = 0
 	m.smartContractTextAreaInput.SetHeight(20)
 	m.smartContractTextAreaInput.SetWidth(150)
+	_, err := clipboard.ReadAll()
+	if err != nil {
+		m.enablePaste = false
+	} else {
+		m.enablePaste = true
+	}
 	return m
 }
 
@@ -48,23 +56,15 @@ func (m SmartContractModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, nil
 
 		case "up", "down":
-			if !m.smartContractTextAreaInput.Focused() {
+			if !m.smartContractTextAreaInput.Focused() && m.enablePaste {
 				updateSmartContractFocusInput(&m, keypress)
 			} else {
 				return updateSmartContractValue(&m, msg)
 			}
 
-		case "ctrl+v", "ctrl+shift+v":
-
-			if !m.smartContractTextAreaInput.Focused() {
-				m.smartContractTextAreaInput.Focus()
-				m.focusInput = 0
-			}
-			newText := textarea.Paste()
-			return updateSmartContractValue(&m, newText)
 		case "enter":
 			// Paste button
-			if m.focusInput == 1 {
+			if m.focusInput == 1 && m.enablePaste {
 				if !m.smartContractTextAreaInput.Focused() {
 					m.smartContractTextAreaInput.Focus()
 					m.focusInput = 0
@@ -123,6 +123,8 @@ func (m SmartContractModel) View() string {
 	if m.focusInput == 1 {
 		button = &focusedPasteSmartContractButton
 	}
-	fmt.Fprintf(&b, "\n\n%s\n\n", *button)
+	if m.enablePaste {
+		fmt.Fprintf(&b, "\n\n%s\n\n", *button)
+	}
 	return b.String()
 }
